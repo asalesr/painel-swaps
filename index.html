@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#2a2e35">
+<title>Painel de Juros</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+:root{color-scheme:dark;--bg:#2a2e35;--surface:#343941;--line:#4a505a;--fg:#e8eaed;--fg2:#c4c8ce;--fg3:#9aa0a8;--s1:#6aaaf2;--neg:#ff9a90;--pos:#86dca4;--warnbg:#4a4230;--warn:#ffd27a}
+:root[data-theme="light"]{color-scheme:light;--bg:#f6f5f2;--surface:#fcfcfb;--line:#e4e2dc;--fg:#0b0b0b;--fg2:#52514e;--fg3:#7a7975;--s1:#2a78d6;--neg:#c62828;--pos:#1b7f3b;--warnbg:#fff4dc;--warn:#8a5a00}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none;width:100%;touch-action:pan-y pinch-zoom;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.hidden{display:none!important}
+#login{max-width:380px;margin:0 auto;padding:48px 16px}
+h1{font-size:1.3rem;margin:0 0 6px}
+.mut{color:var(--fg2);font-size:.88rem}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;margin:14px 0}
+label{display:block;font-size:.85rem;color:var(--fg2);margin:10px 0 4px}
+input,textarea{display:block;min-width:0;max-width:100%;font-size:16px!important}
+#quadro{touch-action:pan-y pinch-zoom}
+input[type=date]{-webkit-appearance:none;appearance:none;min-height:44px;line-height:1.2}
+input[type=date]::-webkit-date-and-time-value{text-align:left}
+input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.7)}
+input[type=file]{font-size:.85rem;width:100%;overflow:hidden}
+.card{overflow:hidden}
+input{width:100%;font:inherit;padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+button{font:inherit;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg);padding:9px 14px;cursor:pointer}
+button.pri{background:var(--s1);border-color:var(--s1);color:#0b1a2b;font-weight:650;width:100%;margin-top:14px}
+.link{background:none;border:none;color:var(--s1);padding:6px 0;text-decoration:underline}
+.msg{margin-top:10px;font-size:.88rem}
+.msg.err{color:var(--neg)} .msg.ok{color:var(--pos)}
+.tw{touch-action:pan-x pan-y}
+#app{position:fixed;inset:0;display:flex;flex-direction:column;height:100dvh;width:100%;max-width:100vw;overflow:hidden}
+#login{height:100%;overflow-y:auto}
+header{display:grid;grid-template-columns:repeat(5,minmax(0,1fr)) auto auto;align-items:center;gap:4px;max-width:100vw;overflow:hidden;padding:8px 10px calc(8px) 10px;border-bottom:1px solid var(--line);background:var(--surface);overflow-x:auto;flex:none;padding-top:max(8px, env(safe-area-inset-top))}
+.tab{white-space:nowrap;font-size:.76rem;padding:7px 2px;min-width:0;overflow:hidden;text-overflow:ellipsis;text-align:center}
+#sair{padding:7px 8px}
+#urgBtn{padding:7px 8px;border-color:var(--neg)}
+header::-webkit-scrollbar{display:none}
+.tab.on{background:var(--s1);border-color:var(--s1);color:#0b1a2b;font-weight:650}
+header .esp{flex:1}
+#info{font-size:.75rem;color:var(--fg3);padding:4px 12px;flex:none;border-bottom:1px solid var(--line)}
+#quadro{flex:1;border:0;width:1px;min-width:100%;max-width:100%;background:var(--bg);display:block}
+#dados,#enviar{flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 12px 40px;overscroll-behavior:contain}
+.prev{font-size:.82rem;color:var(--fg2);margin-top:2px}
+.lin{display:grid;grid-template-columns:1fr;gap:2px}
+input[type=file]{padding:8px}
+textarea{width:100%;font:inherit;padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+table{border-collapse:collapse;width:100%;font-size:.82rem;font-variant-numeric:tabular-nums}
+#dados .tw,#enviar .tw{overflow-x:auto}
+th,td{border-bottom:1px solid var(--line);padding:6px;text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--fg2);font-weight:600}
+.neg{color:var(--neg)}.pos{color:var(--pos)}
+.tw{overflow-x:auto}
+</style>
+</head>
+<body>
+<section id="login" class="hidden">
+  <h1>Painel de juros e swaps</h1>
+  <p class="mut">Acesso restrito. Os dados só aparecem para o dono, depois do login.</p>
+  <div class="card">
+    <label for="email">E-mail</label><input id="email" type="email" autocomplete="username" inputmode="email">
+    <label for="senha">Senha</label><input id="senha" type="password" autocomplete="current-password">
+    <button class="pri" id="entrar">Entrar</button>
+    <button class="link" id="criar">Primeiro acesso: criar senha</button>
+    <div class="msg" id="msg"></div>
+  </div>
+</section>
+
+<section id="app" class="hidden">
+  <header>
+    <button class="tab" data-v="painel">Painel</button>
+    <button class="tab" data-v="cenarios">Cenários</button>
+    <button class="tab" data-v="panorama">Panorama</button>
+    <button class="tab" data-v="dados">Dados</button>
+    <button class="tab" data-v="enviar">Enviar</button>
+    <button class="tab" id="urgBtn" title="Pedir encerramento imediato" aria-label="Pedir encerramento imediato">🚨</button>
+    <button class="tab" id="sair" title="Sair" aria-label="Sair">⏻</button>
+  </header>
+  <div id="info"></div>
+  <iframe id="quadro" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" title="Conteúdo"></iframe>
+  <div id="dados" class="hidden"></div>
+  <div id="enviar" class="hidden">
+    <h1>Metas de saída de cada swap</h1>
+    <p class="mut">Valor de saída a partir do qual o painel acende o sinal verde ("SAIR AGORA"). Zero = sair sem perda. Para aceitar uma perda pequena, digite por exemplo <b>-20.000</b>. Deixe em branco o que não quiser mudar. Vale a partir da próxima atualização do PC (20h30, ou na hora se você rodar o atualizar.bat).</p>
+    <div class="card">
+      <div class="lin"><label for="m30a">Swap 2030 menor</label><input id="m30a" inputmode="decimal"><div class="prev" id="pm30a"></div></div>
+      <div class="lin"><label for="m35">Swap 2035</label><input id="m35" inputmode="decimal"><div class="prev" id="pm35"></div></div>
+      <div class="lin"><label for="m30b">Swap 2030 maior</label><input id="m30b" inputmode="decimal"><div class="prev" id="pm30b"></div></div>
+      <button class="pri" id="mBtn">Salvar metas</button>
+      <div class="msg" id="mMsg"></div>
+      <div class="tw" style="margin-top:10px"><table id="mHist"></table></div>
+    </div>
+
+    <h1 style="margin-top:20px">Enviar atualização do assessor</h1>
+    <p class="mut">Anexe o print ou PDF e, se puder, digite os 3 valores. O PC recebe tudo na próxima atualização (20h30) e, se os valores forem coerentes, recalibra o painel por eles.</p>
+    <div class="card">
+      <label for="eData">Data da posição</label><input id="eData" type="date">
+      <label for="eArq">Arquivo (print, foto ou PDF, até 10 MB)</label><input id="eArq" type="file" accept="image/*,application/pdf">
+      <div class="lin"><label for="e35">Swap 2035 — valor de saída</label><input id="e35" inputmode="decimal" placeholder="ex.: -12.345,67"><div class="prev" id="p35"></div></div>
+      <div class="lin"><label for="e30a">Swap 2030 menor — valor de saída</label><input id="e30a" inputmode="decimal" placeholder="ex.: -1.234,56"><div class="prev" id="p30a"></div></div>
+      <div class="lin"><label for="e30b">Swap 2030 maior — valor de saída</label><input id="e30b" inputmode="decimal" placeholder="ex.: -9.876,54"><div class="prev" id="p30b"></div></div>
+      <div class="lin"><label for="eTot">Total informado (opcional, para conferir a soma)</label><input id="eTot" inputmode="decimal"><div class="prev" id="pTot"></div></div>
+      <label for="eObs">Observação (opcional)</label><textarea id="eObs" rows="2" maxlength="500"></textarea>
+      <button class="pri" id="eBtn">Enviar</button>
+      <div class="msg" id="eMsg"></div>
+    </div>
+    <h1 style="margin-top:20px">Envios recentes</h1>
+    <div class="tw"><table id="eHist"></table></div>
+  </div>
+</section>
+
+<script>
+const SUPA_URL = 'https://gmbbrxwfltzcuuxyvjrh.supabase.co';
+const SUPA_KEY = 'sb_publishable_mZ7vxtenirrRtDFDv03ZRw_sRypoOrJ';   // chave pública: sem login não lê nada
+const sb = supabase.createClient(SUPA_URL, SUPA_KEY, {auth:{persistSession:true, autoRefreshToken:true}});
+const $ = id => document.getElementById(id);
+const msg = (t, tipo='') => { $('msg').textContent = t; $('msg').className = 'msg ' + tipo; };
+const cache = {};
+const AJUSTE_CSS = '<style id="ajusteCelular">\nhtml,body{overflow-x:hidden!important;max-width:100vw;touch-action:pan-y pinch-zoom;overscroll-behavior:none}\n.grid>*{min-width:0}\ninput[type=range]{max-width:100%;margin-left:0;margin-right:0}\n@media (max-width:640px){\n  .tw{overflow-x:visible!important}\n  table.cartao,table.cartao tbody,table.cartao tr,table.cartao td,table.cartao th{display:block;width:auto!important}\n  table.cartao tr.cab{display:none}\n  table.cartao tr{border:1px solid var(--line,#4a505a);border-radius:8px;margin:0 0 8px;padding:6px 10px}\n  table.cartao td{display:flex;justify-content:space-between;align-items:baseline;gap:10px;border:0!important;padding:3px 0!important;text-align:right!important;white-space:normal!important;overflow-wrap:anywhere}\n  table.cartao td::before{content:attr(data-label);color:var(--fg2,#9aa0a8);text-align:left;font-weight:500;flex:0 0 46%}\n  table.cartao td[data-label=""]::before{display:none}\n  table.cartao td:first-child{font-weight:650;justify-content:flex-start;text-align:left!important;border-bottom:1px solid var(--line,#4a505a)!important;padding-bottom:5px!important;margin-bottom:3px}\n  table.cartao td:first-child::before{display:none}\n  canvas{max-width:100%!important}\n}\n</style>';
+const AJUSTE_JS = "<script>\n(function(){\n  if (window.innerWidth > 640) return;\n  function cartoes(){\n    document.querySelectorAll('table').forEach(function(t){\n      var rows = Array.prototype.slice.call(t.rows); if (!rows.length) return;\n      var hr = rows.find(function(r){ return r.querySelector('th') && !r.querySelector('td'); });\n      if (!hr) return;\n      hr.classList.add('cab');\n      var heads = Array.prototype.map.call(hr.cells, function(c){ return c.textContent.trim(); });\n      rows.forEach(function(r){ if (r === hr) return;\n        Array.prototype.forEach.call(r.cells, function(c, i){\n          if (c.tagName === 'TD' && !c.hasAttribute('data-label')) c.setAttribute('data-label', heads[i] || ''); }); });\n      t.classList.add('cartao');\n    });\n  }\n  var pend = null;\n  new MutationObserver(function(){ clearTimeout(pend); pend = setTimeout(cartoes, 60); })\n    .observe(document.body, {childList:true, subtree:true});\n  window.addEventListener('load', cartoes); cartoes();\n})();\n<\/script>";
+
+async function iniciar(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if (session) mostrarApp(); else { $('login').classList.remove('hidden'); $('app').classList.add('hidden'); }
+}
+$('entrar').onclick = async () => {
+  msg('Entrando…');
+  const { error } = await sb.auth.signInWithPassword({ email:$('email').value.trim(), password:$('senha').value });
+  if (error) return msg(error.message.includes('Email not confirmed') ? 'Confirme o e-mail pelo link que o Supabase enviou.' : 'E-mail ou senha inválidos.', 'err');
+  mostrarApp();
+};
+$('criar').onclick = async () => {
+  if ($('senha').value.length < 10) return msg('Use uma senha com pelo menos 10 caracteres.', 'err');
+  msg('Criando acesso…');
+  const { error } = await sb.auth.signUp({ email:$('email').value.trim(), password:$('senha').value,
+    options:{ emailRedirectTo: location.origin + location.pathname } });
+  if (error) return msg('Não foi possível criar: ' + error.message, 'err');
+  msg('Pronto. Abra o e-mail de confirmação do Supabase, clique no link e depois entre aqui.', 'ok');
+};
+$('sair').onclick = async () => { await sb.auth.signOut(); location.reload(); };
+document.querySelectorAll('.tab[data-v]').forEach(b => b.onclick = () => abrir(b.dataset.v));
+$('urgBtn').onclick = () => abrir('painel', true);
+// atalho na tela inicial: https://asalesr.github.io/painel-swaps/#encerrar
+
+function mostrarApp(){
+  $('login').classList.add('hidden'); $('app').classList.remove('hidden');
+  if (location.hash === '#encerrar') return abrir('painel', true);
+  let v = 'painel'; try { v = localStorage.getItem('abaSwaps') || 'painel'; } catch(e) {}
+  abrir(v);
+}
+const fdt = s => new Date(s).toLocaleString('pt-BR', {dateStyle:'short', timeStyle:'short'});
+async function abrir(v, urg){
+  document.querySelectorAll('.tab[data-v]').forEach(b => b.classList.toggle('on', b.dataset.v === v));
+  try { localStorage.setItem('abaSwaps', v); } catch(e) {}
+  ['dados','enviar','quadro'].forEach(x => $(x).classList.add('hidden'));
+  if (v === 'dados') return mostrarDados();
+  if (v === 'enviar') return mostrarEnviar();
+  $('quadro').classList.remove('hidden');
+  $('info').textContent = 'Carregando…';
+  if (!cache[v]) {
+    const { data, error } = await sb.from('documentos').select('titulo, html, atualizado_em').eq('slug', v).maybeSingle();
+    if (error) { $('info').textContent = 'Erro ao carregar: ' + error.message; return; }
+    if (!data) { $('info').textContent = 'Sem acesso a este conteúdo (ou ainda não enviado pelo PC).'; $('quadro').srcdoc = ''; return; }
+    cache[v] = data;
+  }
+  $('info').textContent = `${cache[v].titulo} · enviado do PC em ${fdt(cache[v].atualizado_em)}`;
+  const IR_URG = urg ? "<script>addEventListener('load',function(){setTimeout(function(){var e=document.getElementById('urg');if(e)e.scrollIntoView();},250);});<\/script>" : '';
+  $('quadro').srcdoc = cache[v].html.replace('</head>', AJUSTE_CSS + '</head>').replace('</body>', AJUSTE_JS + IR_URG + '</body>');
+}
+
+const brl = v => v==null ? '—' : (v<0?'−':'+') + 'R$ ' + Math.abs(Math.round(v)).toLocaleString('pt-BR');
+const cl = v => v==null ? '' : (v<0 ? 'neg' : 'pos');
+const pc = v => v==null ? '—' : (+v).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}) + '%';
+function baixarCSV(nome, linhas){
+  if (!linhas.length) return;
+  const cols = Object.keys(linhas[0]);
+  const txt = [cols.join(';'), ...linhas.map(r => cols.map(c => r[c]==null ? '' : String(r[c]).replace('.', ',')).join(';'))].join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + txt], {type:'text/csv'})); a.download = nome; a.click();
+}
+async function mostrarDados(){
+  $('dados').classList.remove('hidden');
+  $('info').textContent = 'Dados guardados no banco (Supabase)';
+  const [s, h] = await Promise.all([
+    sb.from('sinais').select('*').order('data_curva', {ascending:false}).limit(60),
+    sb.from('historico_diario').select('*').order('data', {ascending:false}).limit(400)]);
+  if (s.error || h.error) { $('dados').textContent = 'Erro: ' + (s.error || h.error).message; return; }
+  const S = s.data, Hh = h.data;
+  $('dados').innerHTML = `
+    <h1>Registro das atualizações</h1>
+    <div class="tw"><table><tr><th>Curva de</th><th>Valor de saída</th><th>Dia</th><th>Semana</th><th>Mês</th><th>Precisa cair</th></tr>
+    ${S.map(r=>`<tr><td>${r.data_curva.split('-').reverse().join('/')}</td><td class="${cl(r.total)}">${brl(r.total)}</td><td class="${cl(r.var_dia)}">${brl(r.var_dia)}</td><td class="${cl(r.var_semana)}">${brl(r.var_semana)}</td><td class="${cl(r.var_mes)}">${brl(r.var_mes)}</td><td>${(+r.falta_pontos).toLocaleString('pt-BR',{maximumFractionDigits:2})} p.</td></tr>`).join('')}
+    </table></div>
+    <p><button id="csvS">Baixar registro (CSV)</button></p>
+    <h1 style="margin-top:22px">Histórico diário (últimos 60 dias)</h1>
+    <div class="tw"><table><tr><th>Data</th><th>Longa</th><th>Média</th><th>Curta</th><th>2035</th><th>2030 menor</th><th>2030 maior</th><th>Total</th></tr>
+    ${Hh.slice(0,60).map(r=>`<tr><td>${r.data.split('-').reverse().join('/')}</td><td>${pc(r.longa)}</td><td>${pc(r.media)}</td><td>${pc(r.curta)}</td><td class="${cl(r.s35)}">${brl(r.s35)}</td><td class="${cl(r.s30a)}">${brl(r.s30a)}</td><td class="${cl(r.s30b)}">${brl(r.s30b)}</td><td class="${cl(r.total)}">${brl(r.total)}</td></tr>`).join('')}
+    </table></div>
+    <p><button id="csvH">Baixar histórico completo (CSV)</button></p>
+    <p class="mut">Estimativas do modelo do painel, calibrado no valor oficial do banco. O valor oficial é o que o banco informar.</p>`;
+  $('csvS').onclick = () => baixarCSV('sinais.csv', S);
+  $('csvH').onclick = async () => { const all = await sb.from('historico_diario').select('*').order('data'); baixarCSV('historico_diario.csv', all.data || []); };
+}
+// ---------- metas de saída
+// aqui o sinal é o que você digitar: "-20.000" = perda de 20 mil; "0" = zero; "5.000" = ganho de 5 mil
+function lerMeta(txt){
+  let t = String(txt == null ? '' : txt).trim().replace(/R\$|\s/g,'').replace(/−/g,'-');
+  if (!t) return null;
+  const neg = t.startsWith('-'); t = t.replace(/^[-+]/,'');
+  const v = numBR(t); if (!isFinite(v)) return NaN;
+  return neg && v !== 0 ? -v : v;
+}
+const fMeta = v => v == null ? '—' : (+v === 0 ? 'zero (sem perda)' : (v<0?'−':'+') + 'R$ ' + Math.abs(+v).toLocaleString('pt-BR',{maximumFractionDigits:0}));
+const LIM_META = {m30a:100000, m35:400000, m30b:300000};
+[['m30a','pm30a'],['m35','pm35'],['m30b','pm30b']].forEach(([i,p]) => $(i).addEventListener('input', () => {
+  const v = lerMeta($(i).value);
+  $(p).innerHTML = v == null ? '' : isNaN(v) ? 'valor não reconhecido' : Math.abs(v) > LIM_META[i] ? '<span class="neg">valor fora do limite</span>' : 'nova meta: <b class="'+(v<0?'neg':'pos')+'">'+fMeta(v)+'</b>';
+}));
+async function carregarMetas(){
+  const { data, error } = await sb.from('metas_saida').select('criado_em,s35,s30a,s30b,status').order('criado_em',{ascending:false}).limit(8);
+  if (error) { $('mHist').innerHTML = '<tr><td>Erro: '+error.message+'</td></tr>'; return; }
+  const vig = {}; (data||[]).slice().reverse().forEach(r => { if (String(r.status).startsWith('aplicado')) ['s30a','s35','s30b'].forEach(k => { if (r[k] != null) vig[k] = r[k]; }); });
+  $('m30a').placeholder = 'atual: ' + fMeta(vig.s30a); $('m35').placeholder = 'atual: ' + fMeta(vig.s35); $('m30b').placeholder = 'atual: ' + fMeta(vig.s30b);
+  $('mHist').innerHTML = '<tr><th>Pedido em</th><th>2030 menor</th><th>2035</th><th>2030 maior</th><th>Situação</th></tr>' +
+    (data||[]).map(r => '<tr><td>'+fdt(r.criado_em)+'</td><td>'+fMeta(r.s30a)+'</td><td>'+fMeta(r.s35)+'</td><td>'+fMeta(r.s30b)+'</td><td style="white-space:normal;text-align:left">'+r.status+'</td></tr>').join('');
+}
+$('mBtn').onclick = async () => {
+  const mMsg = (t, tipo='') => { $('mMsg').textContent = t; $('mMsg').className = 'msg ' + tipo; };
+  const v = {s30a: lerMeta($('m30a').value), s35: lerMeta($('m35').value), s30b: lerMeta($('m30b').value)};
+  if (Object.values(v).every(x => x == null)) return mMsg('Digite pelo menos uma meta.', 'err');
+  if (Object.values(v).some(x => x != null && isNaN(x))) return mMsg('Algum valor não foi reconhecido.', 'err');
+  if ((v.s30a!=null && Math.abs(v.s30a)>LIM_META.m30a) || (v.s35!=null && Math.abs(v.s35)>LIM_META.m35) || (v.s30b!=null && Math.abs(v.s30b)>LIM_META.m30b)) return mMsg('Valor fora do limite para o tamanho do swap.', 'err');
+  $('mBtn').disabled = true; mMsg('Salvando…');
+  const ins = await sb.from('metas_saida').insert(v);
+  $('mBtn').disabled = false;
+  if (ins.error) return mMsg('Não foi possível salvar: ' + ins.error.message, 'err');
+  mMsg('Metas salvas. O PC aplica na próxima atualização.', 'ok');
+  ['m30a','m35','m30b'].forEach(i => { $(i).value = ''; }); ['pm30a','pm35','pm30b'].forEach(i => $(i).textContent = '');
+  carregarMetas();
+};
+// ---------- envio pelo celular
+// valor digitado como no extrato do banco: "-12.345,67", "R$ 12.345,67" ou "12345.67".
+// Sem sinal = prejuízo (negativo), como aparece no print. Só fica positivo se digitar "+".
+// Formato estrito: qualquer coisa fora dele ("-" sozinho, "88,774", "1,234.56", "1e5") é recusada.
+function numBR(t){
+  if (/^\d{1,3}(\.\d{3})+(,\d{1,2})?$/.test(t)) return Number(t.replace(/\./g,'').replace(',', '.'));   // 12.345,67
+  if (/^\d+(,\d{1,2})?$/.test(t)) return Number(t.replace(',', '.'));                                     // 12345,67 ou 12345
+  if (/^\d+\.\d{2}$/.test(t)) return Number(t);                                                           // 12345.67
+  return NaN;
+}
+function lerValor(txt){
+  let t = String(txt == null ? '' : txt).trim().replace(/R\$|\s/g,'').replace(/−/g,'-');
+  if (!t) return null;
+  const pos = t.startsWith('+'); t = t.replace(/^[-+]/,'');
+  const v = numBR(t); if (!isFinite(v)) return NaN;
+  return pos ? v : (v === 0 ? 0 : -v);
+}
+const fmtR = v => (v<0?'−':'+') + 'R$ ' + Math.abs(v).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2});
+function prever(){
+  let soma = 0, ok = true;
+  [['e35','p35'],['e30a','p30a'],['e30b','p30b']].forEach(([i,p]) => {
+    const v = lerValor($(i).value);
+    if (v == null) { $(p).textContent = ''; ok = false; }
+    else if (isNaN(v)) { $(p).textContent = 'valor não reconhecido'; ok = false; }
+    else { $(p).innerHTML = 'será registrado como <b class="'+(v<0?'neg':'pos')+'">'+fmtR(v)+'</b>'; soma += v; }
+  });
+  const tt = lerValor($('eTot').value);
+  $('pTot').innerHTML = ok ? ('soma dos 3: <b>'+fmtR(soma)+'</b>' + (tt!=null && !isNaN(tt) ? (Math.abs(tt-soma)<=2 ? ' · <span class="pos">confere</span>' : ' · <span class="neg">não confere com o total</span>') : '')) : '';
+}
+['e35','e30a','e30b','eTot'].forEach(i => $(i).addEventListener('input', prever));
+async function mostrarEnviar(){
+  $('enviar').classList.remove('hidden');
+  carregarMetas();
+  $('info').textContent = 'Os envios ficam numa área privada; só o seu login grava e lê.';
+  if (!$('eData').value) $('eData').value = new Date(Date.now() - new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10);
+  const { data, error } = await sb.from('posicao_informada').select('criado_em,data_ref,s35,s30a,s30b,arquivo,status').order('criado_em',{ascending:false}).limit(10);
+  $('eHist').innerHTML = error ? '<tr><td>Erro: '+error.message+'</td></tr>' :
+    '<tr><th>Enviado</th><th>Posição de</th><th>Total</th><th>Situação</th></tr>' +
+    (data||[]).map(r => { const t = [r.s35,r.s30a,r.s30b].every(x=>x!=null) ? (+r.s35)+(+r.s30a)+(+r.s30b) : null;
+      return '<tr><td>'+fdt(r.criado_em)+'</td><td>'+r.data_ref.split('-').reverse().join('/')+'</td><td class="'+(t==null?'':cl(t))+'">'+(t==null?'só arquivo':brl(t))+'</td><td style="white-space:normal;text-align:left">'+r.status+'</td></tr>'; }).join('');
+}
+$('eBtn').onclick = async () => {
+  const eMsg = (t, tipo='') => { $('eMsg').textContent = t; $('eMsg').className = 'msg ' + tipo; };
+  const data_ref = $('eData').value, arq = $('eArq').files[0];
+  const vals = ['e35','e30a','e30b'].map(i => lerValor($(i).value));
+  const algum = vals.some(v => v != null), todos = vals.every(v => v != null && !isNaN(v));
+  if (!data_ref) return eMsg('Informe a data da posição.', 'err');
+  if (!arq && !todos) return eMsg('Anexe o arquivo ou preencha os 3 valores.', 'err');
+  if (algum && !todos) return eMsg('Preencha os 3 valores (ou deixe os 3 em branco e envie só o arquivo).', 'err');
+  if (arq && arq.size > 10*1024*1024) return eMsg('Arquivo maior que 10 MB.', 'err');
+  const tot = lerValor($('eTot').value);
+  if (todos && tot != null && !isNaN(tot) && Math.abs(tot - vals.reduce((a,b)=>a+b,0)) > 2) return eMsg('A soma dos 3 valores não confere com o total. Confira antes de enviar.', 'err');
+  $('eBtn').disabled = true; eMsg('Enviando…');
+  try {
+    let caminho = null;
+    if (arq) {
+      const ext = (arq.name.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g,'');
+      caminho = data_ref + '_' + Date.now() + '.' + ext;
+      const up = await sb.storage.from('entrada').upload(caminho, arq, { contentType: arq.type || undefined, upsert:false });
+      if (up.error) throw up.error;
+    }
+    const ins = await sb.from('posicao_informada').insert({ data_ref, arquivo: caminho,
+      s35: todos ? vals[0] : null, s30a: todos ? vals[1] : null, s30b: todos ? vals[2] : null,
+      total_informado: (todos && tot!=null && !isNaN(tot)) ? tot : null, observacao: $('eObs').value.trim() || null });
+    if (ins.error) throw ins.error;
+    eMsg('Enviado. O PC vai processar na próxima atualização (20h30).', 'ok');
+    ['eArq','e35','e30a','e30b','eTot','eObs'].forEach(i => $(i).value = ''); prever();
+    mostrarEnviar();
+  } catch (e) { eMsg('Não foi possível enviar: ' + (e.message || e), 'err'); }
+  finally { $('eBtn').disabled = false; }
+};
+sb.auth.onAuthStateChange((ev) => { if (ev === 'SIGNED_OUT') location.reload(); });
+iniciar();
+</script>
+</body>
+</html>
