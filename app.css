@@ -229,3 +229,25 @@ input[type=range]{width:100%;max-width:100%;min-width:0;padding:0;margin:6px 0 0
 .tres3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:8px;font-size:.85rem;color:var(--fg2)}
 .tres3 b{display:block;font-size:1rem;color:var(--fg);font-variant-numeric:tabular-nums}
 .lista-sinais{margin:0;padding-left:18px}.lista-sinais li{margin:0 0 8px}
+
+/* ---- Agenda de alertas */
+.ag{border-left:5px solid var(--line)}
+.ag.alerta{border-left-color:var(--lar)}.ag.atencao{border-left-color:var(--am)}
+.ag.feito{border-left-color:var(--line);opacity:.82}
+.ag h2{margin:8px 0 6px}
+.ag .chip{justify-self:auto;display:inline-block;white-space:normal}
+.chip.alerta{--c:var(--lar)}.chip.atencao{--c:var(--am)}.chip.normal,.chip.sem_sinal{--c:var(--cz)}.chip.ok{--c:var(--vd)}
+.ag details{background:none;border:0;border-top:1px solid var(--grid);border-radius:0;padding:8px 0 0;margin:8px 0 0}
+.ag .decisao{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-top:12px}
+.ag-st{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;margin-top:10px;font-size:.88rem;color:var(--fg2)}
+.ag-st .link{min-height:32px}
+.ag .msg:empty{display:none}
+.sec-ag{display:flex;justify-content:space-between;align-items:baseline;gap:4px 10px;flex-wrap:wrap;margin:20px 0 2px}
+.sec-ag h2{margin:0}
+.hero .peq{display:block}
+/* quantos itens esperam decisão: no item do menu e no botão "Mais" */
+#nav button[data-n]:not([data-n="0"])::after,#barra button[data-n]:not([data-n="0"])::after{content:attr(data-n);min-width:20px;height:20px;padding:0 6px;border-radius:10px;
+  background:var(--lar);color:#1c1300;font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;line-height:1}
+#nav button[data-n]:not([data-n="0"])::after{margin-left:auto}
+#barra button{position:relative}
+#barra button[data-n]:not([data-n="0"])::after{position:absolute;top:5px;left:calc(50% + 7px)}

@@ -27,9 +27,11 @@ const ICONES = {
   panorama: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/>',
   dados:    '<path d="M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
   mais:     '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  agenda:   '<path d="M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM4 10h16M8 3v4M16 3v4M8.5 15l2.5 2.5 4.5-5"/>',
 };
 const svg = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONES[k]}</svg>`;
 const TELAS = [
+  {id:'agenda',   rot:'Agenda de alertas',   grupo:'Para decidir', icone:'agenda',   tipo:'agenda', dados:true, destaque:true},
   {id:'s30a',     rot:'2030 menor',          grupo:'Seus swaps',   icone:'swap',     barra:true, tipo:'swap', dados:true},
   {id:'s35',      rot:'2035',                grupo:'Seus swaps',   icone:'swap',     barra:true, tipo:'swap', dados:true},
   {id:'s30b',     rot:'2030 maior',          grupo:'Seus swaps',   icone:'swap',     barra:true, tipo:'swap', dados:true},
@@ -154,8 +156,10 @@ function mostrarApp(){
   $('login').classList.add('hidden'); $('app').classList.remove('hidden');
   aplicarTema(document.documentElement.dataset.theme || 'dark');
   montarNav();
-  carregarResumo().then(() => { if (ATUAL && !['doc','dados','enviar'].includes(telaAtual().tipo)) abrir(ATUAL); });
+  carregarResumo().then(() => { if (ATUAL && !['doc','dados','enviar'].includes(telaAtual().tipo)) abrir(ATUAL); return carregarDecisoes(); })
+    .then(() => { marcarAgenda(); if (ATUAL === 'agenda') renderAgenda(); });
   if (location.hash === '#encerrar') return abrir('painel', true);
+  if (location.hash === '#agenda') return abrir('agenda');
   abrir(telaSalva());
 }
 function mostrarAppLocal(){
@@ -165,7 +169,8 @@ function mostrarAppLocal(){
   aplicarTema(document.documentElement.dataset.theme || 'dark');
   montarNav();
   R = prepararResumo(LOCAL); RESUMO_ESTADO = 'ok';
-  abrir(telaSalva());
+  carregarDecisoes().then(() => { marcarAgenda(); if (ATUAL === 'agenda') renderAgenda(); });
+  abrir(location.hash === '#agenda' ? 'agenda' : telaSalva());
 }
 const telaAtual = () => TELAS.find(t => t.id === ATUAL) || TELAS[0];
 const fdt = s => new Date(s).toLocaleString('pt-BR', {dateStyle:'short', timeStyle:'short'});
@@ -244,6 +249,7 @@ async function abrir(v, urg){
   else if (t.tipo === 'novo') renderNovo();
   else if (t.tipo === 'inflacao') renderInflacao();
   else if (t.tipo === 'roteiro') renderRoteiro();
+  else if (t.tipo === 'agenda') renderAgenda();
   else if (t.tipo === 'doc') return LOCAL ? renderDocLocal(t.id) : carregarDoc(t.id, urg);
   else if (t.tipo === 'dados') { if (!LOCAL) return mostrarDados(); }
   else if (t.tipo === 'enviar') { if (!LOCAL) return mostrarEnviar(); }
@@ -826,6 +832,166 @@ function renderRoteiro(){
     c.querySelector('[data-mail]').href = L.mail; c.querySelector('[data-wa]').href = L.wa;
     c.querySelector('[data-copiar]').onclick = e => copiarTexto(ta, e.currentTarget);
   });
+}
+
+// ====================================================================================================
+// 10a. AGENDA DE ALERTAS (o PC monta os itens em resumo.agenda; aqui só se mostra e se guarda a decisão)
+//      Decisões: tabela agenda_decisoes (só inserir e ler; vale a mais recente de cada item em cada período).
+// ====================================================================================================
+const AG_FREQ = [
+  {id:'diario',    rot:'Todo dia',        sub:'Olhe depois das 21h, quando os dados do dia já entraram. Os botões só aparecem quando há algo para decidir.'},
+  {id:'semanal',   rot:'Toda semana',     sub:'Um pedido ao assessor e uma leitura do mercado.'},
+  {id:'quinzenal', rot:'A cada 15 dias',  sub:'Novo swap e respostas que o banco ainda deve.'},
+  {id:'mensal',    rot:'Todo mês',        sub:'Melhor depois do dia 12, quando a inflação do mês anterior já saiu.'},
+];
+const CHAVE_AG = 'agendaDecisoesV1';
+let AG_DEC = null, AG_HIST = [], AG_ERRO = '', AG_ABRIR = null;
+const isoD = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+const fDM = d => String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0');
+// período em que uma decisão vale: o dia dos dados, a semana (segunda a domingo), a quinzena (1–15, 16–fim) ou o mês
+function cicloDe(freq){
+  const h = new Date(); h.setHours(12, 0, 0, 0);
+  if (freq === 'diario') { const d = (R && R.data_curva) || isoD(h); return {chave:'D' + d, inicio:d, rot:'dados de ' + fD(d)}; }
+  if (freq === 'semanal') {
+    const s = new Date(h); s.setDate(h.getDate() - ((h.getDay() + 6) % 7)); const f = new Date(s); f.setDate(s.getDate() + 6);
+    return {chave:'S' + isoD(s), inicio:isoD(s), rot:'semana de ' + fDM(s) + ' a ' + fDM(f)};
+  }
+  if (freq === 'quinzenal') {
+    const q = h.getDate() <= 15 ? 1 : 2, ini = new Date(h.getFullYear(), h.getMonth(), q === 1 ? 1 : 16), ult = new Date(h.getFullYear(), h.getMonth() + 1, 0).getDate();
+    return {chave:'Q' + isoD(ini), inicio:isoD(ini), rot:'de ' + (q === 1 ? '1 a 15' : '16 a ' + ult) + ' de ' + MESES_EXT[h.getMonth()]};
+  }
+  const ini = new Date(h.getFullYear(), h.getMonth(), 1);
+  return {chave:'M' + isoD(ini).slice(0, 7), inicio:isoD(ini), rot:MESES_EXT[h.getMonth()] + ' de ' + h.getFullYear()};
+}
+async function carregarDecisoes(){
+  AG_ERRO = '';
+  if (LOCAL || !sb) { try { AG_HIST = JSON.parse(localStorage.getItem(CHAVE_AG) || '[]'); if (!Array.isArray(AG_HIST)) AG_HIST = []; } catch(e) { AG_HIST = []; } }
+  else {
+    const { data, error } = await sb.from('agenda_decisoes').select('item,ciclo,frequencia,decisao,titulo,criado_em').order('id', {ascending:false}).limit(400);
+    if (error) { AG_ERRO = error.message; AG_HIST = []; } else AG_HIST = data || [];
+  }
+  AG_DEC = {}; AG_HIST.forEach(r => { const k = r.item + '|' + r.ciclo; if (!AG_DEC[k]) AG_DEC[k] = r; });   // a lista vem da mais recente para a mais antiga
+}
+async function guardarDecisao(it, ciclo, decisao){
+  const reg = {item:it.id, ciclo:ciclo.chave, frequencia:it.freq, decisao, titulo:String(it.titulo || '').slice(0, 200)};
+  if (!LOCAL && sb) { const ins = await sb.from('agenda_decisoes').insert(reg); if (ins.error) return ins.error.message; }
+  const linha = {...reg, criado_em:new Date().toISOString()};
+  AG_HIST.unshift(linha); AG_DEC[it.id + '|' + ciclo.chave] = linha;
+  if (LOCAL || !sb) { try { localStorage.setItem(CHAVE_AG, JSON.stringify(AG_HIST.slice(0, 300))); } catch(e) {} }
+  return null;
+}
+function estadoItem(it){
+  const c = cicloDe(it.freq), d = AG_DEC && AG_DEC[it.id + '|' + c.chave];
+  const dec = d && d.decisao !== 'reaberto' ? d.decisao : null;
+  const feito = !dec && !!(it.prova && it.prova.data && it.prova.data >= c.inicio);
+  return {c, d, dec, feito, pend: !dec && !feito && !!it.decidir};
+}
+const itensAgenda = () => (R && R.agenda && Array.isArray(R.agenda.itens)) ? R.agenda.itens : [];
+function marcarAgenda(){
+  const n = String(AG_DEC ? itensAgenda().filter(it => estadoItem(it).pend).length : 0);
+  const b = document.querySelector('#nav button[data-s="agenda"]'), m = $('barra').querySelector('[data-mais]');
+  if (b) b.dataset.n = n; if (m) m.dataset.n = n;
+}
+function cartaoAgenda(it){
+  const e = estadoItem(it), chip = e.dec === 'acatado' || e.feito ? 'ok' : (e.dec === 'descartado' ? 'normal' : it.estado);
+  const cab = `<span class="chip ${esc(chip)}">${esc(e.dec === 'acatado' ? 'ACATADO' : e.dec === 'descartado' ? 'DESCARTADO' : e.feito ? 'JÁ FEITO' : it.sinal)}</span><h2>${esc(it.titulo)}</h2>`;
+  if (e.dec === 'descartado')
+    return `<div class="card ag feito" data-ag="${esc(it.id)}">${cab}<div class="ag-st"><span>Descartado em ${fdt(e.d.criado_em)}. Volta no próximo período.</span><button type="button" class="link" data-dec="reaberto">Desfazer</button></div><div class="msg" data-agmsg></div></div>`;
+  let pe;
+  if (e.dec) pe = `<div class="ag-st"><span>Acatado em ${fdt(e.d.criado_em)}.</span><button type="button" class="link" data-dec="reaberto">Desfazer</button></div>`;
+  else if (e.feito) pe = `<div class="ag-st"><span>Já feito neste período: ${esc(it.prova.texto)}.</span></div>`;
+  else if (it.decidir) pe = `<div class="decisao"><button type="button" class="btn prim" data-dec="acatado">Acatar</button><button type="button" class="btn" data-dec="descartado">Descartar</button></div>`;
+  else pe = '<div class="ag-st"><span>Nada a decidir hoje.</span></div>';
+  const msgBloco = it.mensagem ? `<details data-msg><summary>Ver a mensagem ao assessor</summary>
+      ${it.nota_mensagem ? `<p class="peq" style="margin:8px 0 0">${esc(it.nota_mensagem)}</p>` : ''}
+      <textarea class="msgbox" rows="8" style="margin-top:8px" aria-label="Mensagem ao assessor"></textarea>
+      <div class="acoes"><a class="btn prim" data-mail target="_blank" rel="noopener" href="#">Abrir e-mail</a><a class="btn" data-wa target="_blank" rel="noopener" href="#">Abrir WhatsApp</a><button type="button" class="btn" data-copiar>Copiar mensagem</button>${it.diario ? '<button type="button" class="btn precisa-login" data-anotar>Anotar no diário</button>' : ''}</div>
+      <p class="nota" style="margin:0">Os botões só abrem o rascunho. Quem envia é você.</p></details>` : '';
+  const anotar = !it.mensagem && it.diario ? '<button type="button" class="btn precisa-login" data-anotar>Anotar no diário</button>' : '';
+  const ir = it.tela ? `<button type="button" class="btn" data-ir="${esc(it.tela.id)}">${esc(it.tela.rotulo)}</button>` : '';
+  return `<div class="card ag ${esc(it.estado)}${e.dec || e.feito ? ' feito' : ''}" data-ag="${esc(it.id)}">${cab}
+    <p>${esc(it.leitura)}</p>
+    <details><summary>Por que isso importa</summary><p class="peq" style="margin:8px 0 0">${esc(it.porque)}</p></details>
+    ${msgBloco}${ir || anotar ? `<div class="acoes">${ir}${anotar}</div>` : ''}${pe}<div class="msg" data-agmsg></div></div>`;
+}
+function renderAgenda(){
+  const sec = $('tela-agenda');
+  if (!R) { sec.innerHTML = vazioResumo(); return; }
+  const itens = itensAgenda();
+  if (!itens.length) { sec.innerHTML = '<div class="card"><h2>A agenda ainda não chegou</h2><p class="mut">Ela é montada pelo PC junto com os números do dia. Aparece aqui depois da próxima atualização (20h30).</p></div>'; return; }
+  if (!AG_DEC) { sec.innerHTML = '<div class="card"><p>Carregando a agenda…</p></div>'; carregarDecisoes().then(() => { marcarAgenda(); if (ATUAL === 'agenda') renderAgenda(); }); return; }
+  const est = itens.map(it => ({it, e:estadoItem(it)})), pend = est.filter(x => x.e.pend), alertas = pend.filter(x => x.it.estado === 'alerta').length;
+  const peso = x => (x.e.pend ? 0 : 10) + ({alerta:0, atencao:1, normal:2, sem_sinal:3}[x.it.estado] ?? 2);
+  let h = `<div class="hero ${alertas ? 'prej' : pend.length ? 'zero' : 'luc'}"><span class="rot">${pend.length ? (pend.length === 1 ? '1 item espera a sua decisão' : pend.length + ' itens esperam a sua decisão') : 'Nada pendente agora'}</span>
+      <span class="peq">${alertas ? (alertas === 1 ? 'Um deles é alerta: ' : alertas + ' deles são alertas: ') + 'o mercado se mexeu ou um swap chegou perto da meta.' : 'Nenhum alerta de mercado neste momento.'}</span></div>
+    <p class="mut"><b>Acatar</b> = vou levar em conta ou vou pedir ao assessor. <b>Descartar</b> = desta vez não; o item volta no próximo período. O app só organiza e monta as mensagens: a decisão e o envio são seus.</p>
+    <details><summary>Como ler os alertas</summary><p class="peq" style="margin:8px 0 0"><b>Juros longos caem:</b> os swaps que você já tem melhoram. É a janela de <b>saída</b>: veja qual chegou perto da meta e peça a cotação firme.<br><b>Juros longos sobem:</b> os swaps atuais pioram, e a taxa fixa de um novo swap fica mais alta. É a janela de <b>entrada</b>, mas um novo swap aumenta a exposição: ele só dá lucro, e só ajuda a compensar os atuais, se os juros caírem depois da entrada.</p></details>`;
+  if (AG_ERRO) h += `<div class="aviso" role="alert">Não foi possível ler as decisões guardadas (${esc(AG_ERRO)}). Os itens aparecem como pendentes.</div>`;
+  if (LOCAL) h += '<p class="nota">Nesta versão do PC, sem login, as decisões ficam guardadas só neste computador.</p>';
+  AG_FREQ.forEach(f => {
+    const grupo = est.filter(x => x.it.freq === f.id).sort((a, b) => peso(a) - peso(b) || a.it.ordem - b.it.ordem);
+    if (!grupo.length) return;
+    const np = grupo.filter(x => x.e.pend).length;
+    h += `<div class="sec-ag"><h2>${f.rot}</h2><span class="peq">${esc(cicloDe(f.id).rot)} · ${np ? (np === 1 ? '1 pendente' : np + ' pendentes') : 'nada pendente'}</span></div><p class="peq" style="margin:0 0 8px">${f.sub}</p>`
+       + grupo.map(x => cartaoAgenda(x.it)).join('');
+  });
+  const rg = (R.agenda && R.agenda.regras) || {};
+  h += `<div class="card"><div class="bloco-t">Lembretes no calendário do celular</div>
+      <p class="peq">Cria quatro lembretes que se repetem: dias úteis às 21h, segundas às 9h, dias 1 e 16 às 9h e dia 12 às 9h. Cada um traz o atalho para esta tela. O arquivo não leva nenhum valor seu.</p>
+      <div class="acoes"><button type="button" class="btn" data-ics>Baixar os lembretes</button></div>
+      <p class="nota" style="margin:0">Abra o arquivo baixado e confirme a inclusão no calendário. Para parar, apague os eventos no calendário.</p></div>
+    <details><summary>Decisões anteriores</summary><div data-hist></div></details>
+    <p class="nota">Regras dos alertas: juros longos mexendo ${fPP(rg.movimento_forte_pp ?? 0.5)} ou mais em sete dias; swap que chega perto, encosta ou passa da meta; distância até a meta caindo ${fPP(rg.aproximacao_pp ?? 0.5)} ou mais em sete dias; inflação em alta. São leituras de números, não recomendações.</p>`;
+  sec.innerHTML = h;
+  const DEC = {acatado:'acatado', descartado:'descartado', reaberto:'reaberto (desfeito)'};
+  sec.querySelector('[data-hist]').innerHTML = AG_HIST.length
+    ? AG_HIST.slice(0, 40).map(r => `<div class="of"><div><b>${esc(r.titulo || r.item)}</b><div class="peq">${fdt(r.criado_em)}</div></div><div class="d">${esc(DEC[r.decisao] || r.decisao)}</div></div>`).join('')
+    : '<p class="peq" style="margin:8px 0 0">Nenhuma decisão registrada ainda.</p>';
+  sec.querySelector('[data-ics]').onclick = baixarLembretes;
+  sec.querySelectorAll('.card[data-ag]').forEach(c => {
+    const it = itens.find(x => x.id === c.dataset.ag), ta = c.querySelector('textarea'), m = c.querySelector('[data-agmsg]');
+    if (ta) {
+      ta.value = String(it.mensagem || '').replace(/\{saudacao\}/g, saud());
+      const liga = (sel, k) => { const a = c.querySelector(sel); a.addEventListener('click', () => { a.href = linksContato(it.assunto || it.titulo, ta.value)[k]; }); a.href = linksContato(it.assunto || it.titulo, ta.value)[k]; };
+      liga('[data-mail]', 'mail'); liga('[data-wa]', 'wa');
+      c.querySelector('[data-copiar]').onclick = ev => copiarTexto(ta, ev.currentTarget);
+    }
+    const an = c.querySelector('[data-anotar]');
+    if (an) an.onclick = () => { PRE_DIARIO = {swap:it.diario.swap, tipo:it.diario.tipo, texto: ta ? ta.value : (it.diario.texto || '')}; abrir('diario'); };
+    const ir = c.querySelector('[data-ir]'); if (ir) ir.onclick = () => abrir(ir.dataset.ir);
+    c.querySelectorAll('[data-dec]').forEach(b => b.onclick = async () => {
+      c.querySelectorAll('[data-dec]').forEach(x => x.disabled = true); m.textContent = 'Guardando…'; m.className = 'msg';
+      const erro = await guardarDecisao(it, cicloDe(it.freq), b.dataset.dec);
+      if (erro) { m.textContent = 'Não foi possível guardar: ' + erro; m.className = 'msg err'; c.querySelectorAll('[data-dec]').forEach(x => x.disabled = false); return; }
+      AG_ABRIR = b.dataset.dec === 'acatado' ? it.id : null;
+      marcarAgenda(); renderAgenda();
+    });
+  });
+  if (AG_ABRIR) {      // acabou de acatar: deixa a mensagem aberta e o cartão à vista
+    const c = [...sec.querySelectorAll('.card[data-ag]')].find(x => x.dataset.ag === AG_ABRIR); AG_ABRIR = null;
+    if (c) { const d = c.querySelector('[data-msg]'); if (d) d.open = true; c.scrollIntoView({block:'center'}); }
+  }
+}
+// lembretes que se repetem, em arquivo de calendário (.ics): só texto genérico e o atalho do app
+function baixarLembretes(){
+  const p2 = n => String(n).padStart(2, '0'), dia = d => d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate());
+  const prox = teste => { const d = new Date(); for (let i = 0; i < 45; i++) { d.setDate(d.getDate() + 1); if (teste(d)) break; } return d; };
+  const link = LOCAL ? 'https://asalesr.github.io/painel-swaps/#agenda' : location.origin + location.pathname + '#agenda';
+  const u = new Date(), carimbo = u.getUTCFullYear() + p2(u.getUTCMonth() + 1) + p2(u.getUTCDate()) + 'T' + p2(u.getUTCHours()) + p2(u.getUTCMinutes()) + p2(u.getUTCSeconds()) + 'Z';
+  const txt = s => String(s).replace(/\\/g, '\\\\').replace(/([,;])/g, '\\$1').replace(/\n/g, '\\n');
+  const EV = [
+    {id:'diario',    hora:'210000', rr:'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR', d:prox(d => d.getDay() >= 1 && d.getDay() <= 5), t:'Swaps: ver a agenda do dia (1 minuto)', ds:'Os dados do dia já entraram. Veja se algum swap ou os juros longos pedem decisão.'},
+    {id:'semanal',   hora:'090000', rr:'FREQ=WEEKLY;BYDAY=MO',             d:prox(d => d.getDay() === 1),                   t:'Swaps: pedir extrato e cotação de saída', ds:'Pedir ao assessor, no mesmo dia, o valor do extrato e a cotação firme de saída de cada swap. Ler a semana.'},
+    {id:'quinzenal', hora:'090000', rr:'FREQ=MONTHLY;BYMONTHDAY=1,16',     d:prox(d => d.getDate() === 1 || d.getDate() === 16), t:'Swaps: proposta de novo swap e respostas pendentes', ds:'Pedir a proposta oficial de um novo swap e cobrar as respostas por escrito em aberto. Se cair em fim de semana, fazer no dia útil seguinte.'},
+    {id:'mensal',    hora:'090000', rr:'FREQ=MONTHLY;BYMONTHDAY=12',       d:prox(d => d.getDate() === 12),                 t:'Swaps: extrato do mês, inflação e decisão do mês', ds:'Pedir o extrato oficial e a posição das garantias, ler a inflação do mês e anotar a decisão do mês no diário.'},
+  ];
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Painel de Juros//Agenda de alertas//PT-BR', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH']
+    .concat(...EV.map(e => ['BEGIN:VEVENT', 'UID:agenda-' + e.id + '@painel-de-juros', 'DTSTAMP:' + carimbo, 'DTSTART:' + dia(e.d) + 'T' + e.hora, 'DURATION:PT15M',
+      'RRULE:' + e.rr, 'SUMMARY:' + txt(e.t), 'DESCRIPTION:' + txt(e.ds + '\n' + link), 'URL:' + link,
+      'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + txt(e.t), 'TRIGGER:PT0M', 'END:VALARM', 'END:VEVENT']), ['END:VCALENDAR']).join('\r\n') + '\r\n';
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([ics], {type:'text/calendar;charset=utf-8'})); a.download = 'lembretes_swaps.ics';
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  return ics;
 }
 
 // ====================================================================================================
