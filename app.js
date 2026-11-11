@@ -518,37 +518,114 @@ function renderCarteira(){
 // ====================================================================================================
 // 9. NOVO SWAP
 // ====================================================================================================
+// ---- conta do dia da entrada (igual à do PC): quanto vale, no primeiro dia, um swap novo de 'valor' à taxa 'taxa'
+function custoEntrada(N, valor, taxa){
+  const c = N.calc; if (!c || !num(c.r) || !num(c.n)) return null;
+  const d = Math.pow(1 + c.r / 100, 1 / 252) - 1;
+  return valor * (Math.pow(1 + taxa / 100, c.n / 252) - Math.pow(1 + c.pct * d, c.n)) / Math.pow(1 + c.r / 100, c.n / 252);
+}
+// ---- interpolação na grade valor × taxa da simulação
+function naGrade(N, valor, taxa){
+  const G = N.grade; if (!G || !G.celulas) return null;
+  const V = G.valores, T = G.taxas, nt = T.length;
+  const pos = (arr, x) => { x = Math.min(Math.max(x, arr[0]), arr[arr.length - 1]); let i = 0; while (i < arr.length - 2 && x > arr[i + 1]) i++; return [i, (x - arr[i]) / (arr[i + 1] - arr[i])]; };
+  const [iv, fv] = pos(V, valor), [it, ft] = pos(T, taxa);
+  const cel = (a, b) => G.celulas[a * nt + b];
+  const out = {};
+  G.colunas.forEach((k, j) => { out[k] = cel(iv, it)[j] * (1 - fv) * (1 - ft) + cel(iv + 1, it)[j] * fv * (1 - ft) + cel(iv, it + 1)[j] * (1 - fv) * ft + cel(iv + 1, it + 1)[j] * fv * ft; });
+  const mil = v => Math.round(v / 1000) * 1000;
+  return {chance: {min: out.chance_min, max: out.chance_max}, tipico: mil(out.tipico), tipico_faixa: {min: mil(out.tipico_min), max: mil(out.tipico_max)},
+          pior_caso: mil(out.pior_caso), pior_hoje: {min: out.pior_hoje_min, max: out.pior_hoje_max}, c2030: {min: out.c2030_min, max: out.c2030_max},
+          fora: valor < V[0] || valor > V[V.length - 1] || taxa < T[0] || taxa > T[T.length - 1]};
+}
+const CHAVE_OFERTA = 'ofertaAssessorV1';
+function ofertaSalva(N){
+  try { const o = JSON.parse(localStorage.getItem(CHAVE_OFERTA) || 'null'); if (o && num(o.valor) && num(o.taxa)) return o; } catch (e) {}
+  return N.oferta_assessor && num(N.oferta_assessor.taxa) ? N.oferta_assessor : null;
+}
+const fTaxa = t => t.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}) + '%';
 function renderNovo(){
   const sec = $('tela-novo'), N = R && R.novo_swap;
   if (!R) { sec.innerHTML = vazioResumo(); return; }
   if (!N) { sec.innerHTML = '<div class="card"><h2>Novo swap</h2><p class="mut">O resumo enviado não traz a avaliação de um novo swap.</p></div>'; return; }
-  let h = `<div class="card"><div class="bloco-t">Taxa justa de mercado hoje</div><div class="grande" data-k="taxa_justa">${fPct(N.taxa_justa)} ao ano</div>
-    <p class="peq" style="margin-top:6px">É a taxa fixa que tornaria um swap justo para os dois lados hoje${num(N.pct_cdi) ? `, pagando ${N.pct_cdi.toLocaleString('pt-BR')}% do CDI` : ''}${N.vencimento ? `, com vencimento em ${fD(N.vencimento)}` : ''}${N.data_taxa ? ` (taxa de ${fD(N.data_taxa)})` : ''}. Uma oferta com taxa menor que essa já começa com perda para você.</p></div>`;
-  if ((N.ofertas || []).length) h += '<div class="card"><div class="bloco-t">Ofertas e o que se perde no dia da entrada</div>' + N.ofertas.map((o, i) => {
-    const dif = num(N.taxa_justa) && num(o.taxa) ? N.taxa_justa - o.taxa : null;
-    return `<div class="of"><div><b>${fPct(o.taxa)} ao ano</b> sobre ${fR(o.valor)}${dif != null && dif > 0.004 ? `<div class="peq">${fPP(dif)} abaixo da taxa justa</div>` : ''}</div><div class="d ${cor(o.custo_entrada)}" data-k="oferta_${i}">${Math.round(o.custo_entrada) < 0 ? 'perde ' : ''}${fR(o.custo_entrada)}</div></div>`;
-  }).join('') + '<p class="nota" style="margin:10px 0 0">Esse valor é a diferença entre a taxa oferecida e a taxa justa, no dia em que o contrato começa.</p></div>';
-  if ((N.comparacao || []).length) {
-    const cartao = (c, i) => `<div class="card"><h2>${esc(c.nome)}</h2><dl class="cmp">
-        <dt>Chance de a soma de todos os swaps chegar a zero até jan/2030</dt><dd data-k="cmp_${i}_chance">${faixa(c.chance_zerar_carteira)}</dd>
-        ${c.valor && c.chance_zerar_com_2030_maior ? `<dt>Chance de o novo compensar a perda do 2030 maior</dt><dd>${faixa(c.chance_zerar_com_2030_maior)}</dd>` : ''}
-        <dt>Resultado típico em jan/2030, sem encerrar nada</dt><dd class="${cor(c.tipico)}" data-k="cmp_${i}_tipico">${fRs(c.tipico)}<small>${fxTxt(c.tipico_faixa)}</small></dd>
-        <dt>Cenário ruim em jan/2030 (1 em cada 10)</dt><dd class="${cor(c.pior_caso)}" data-k="cmp_${i}_pior">${fRs(c.pior_caso)}</dd>
-        ${c.prob_pior_que_hoje ? `<dt>Chance de terminar pior que hoje</dt><dd>${faixa(c.prob_pior_que_hoje)}</dd>` : ''}
-        ${num(c.custo_entrada) && Math.round(c.custo_entrada) !== 0 ? `<dt>Perda no dia da entrada</dt><dd class="${cor(c.custo_entrada)}">${fRs(c.custo_entrada)}</dd>` : ''}
-      </dl>${barraFaixa(c.chance_zerar_carteira)}</div>`;
-    const sem = N.comparacao.find(c => !c.valor);
-    const of = v => N.comparacao.filter(c => c.valor === v && !c.taxa_de_mercado).sort((a, b) => b.taxa - a.taxa)[0];   // melhor oferta de cada tamanho
-    const frases = [100000, 400000].map(of).filter(Boolean).map(c => sem ? `<li><b>${esc(c.nome)}:</b> você entra perdendo ${fR(c.custo_entrada)}. A chance de a soma chegar a zero passa de ${faixaCurta(sem.chance_zerar_carteira)} para <b>${faixaCurta(c.chance_zerar_carteira)}</b>. O cenário ruim passa de ${fRs(sem.pior_caso)} para <b class="neg">${fRs(c.pior_caso)}</b>.</li>` : '').join('');
-    if (frases) h += `<div class="card"><div class="bloco-t">Em poucas palavras</div><p style="margin:0 0 8px">Um novo swap é uma aposta a mais na queda dos juros: aumenta a chance de zerar <b>e</b> aumenta a perda se os juros não caírem.</p><ul style="margin:0;padding-left:18px">${frases}</ul><p class="nota" style="margin:10px 0 0">“Soma chegar a zero” = sair de todos os swaps juntos, com um compensando o outro. É diferente de cada swap chegar a zero sozinho (aba Carteira).</p></div>`;
-    const vista = N.comparacao.map((c, i) => [c, i]).filter(([c]) => !c.valor || (c.valor === 100000 && !c.taxa_de_mercado));
-    const resto = N.comparacao.map((c, i) => [c, i]).filter(([c]) => c.valor && !(c.valor === 100000 && !c.taxa_de_mercado));
-    h += '<div class="bloco-t" style="margin-top:6px">Sua carteira: sem novo swap × com novo swap de R$ 100 mil</div><div class="grade">' + vista.map(([c, i]) => cartao(c, i)).join('') + '</div>';
-    if (resto.length) h += '<details style="margin:10px 0"><summary>Ver também: R$ 400 mil e a taxa justa de mercado</summary><div class="grade" style="margin-top:10px">' + resto.map(([c, i]) => cartao(c, i)).join('') + '</div></details>';
-  }
-  h += '<p class="nota">Simulação própria, com margem grande; serve para ter noção, não para prever.</p>';
-  h += '<div class="destaque-fixo">O app mostra os números; a decisão é sua. Não é recomendação de investimento.</div>';
-  sec.innerHTML = h;
+  const G = N.grade, of = ofertaSalva(N), vPad = (of && num(of.valor)) ? of.valor : 100000;
+  const vMin = G ? G.valores[0] : 50000, vMax = G ? G.valores[G.valores.length - 1] : 500000, tMin = G ? G.taxas[0] : 15, tMax = G ? G.taxas[G.taxas.length - 1] : 23;
+  const cond = `pagando ${num(N.pct_cdi) ? N.pct_cdi.toLocaleString('pt-BR') : '135'}% do CDI, com vencimento em ${fD(N.vencimento)}`;
+  sec.innerHTML = `
+  <div class="card"><div class="bloco-t">O que é esta tela</div>
+    <p style="margin:0">Um novo swap é <b>mais uma aposta na queda dos juros</b>. Se os juros caírem, ele ajuda a compensar a perda dos swaps que você já tem. Se não caírem, ele <b>aumenta</b> a perda. Aqui você vê, em reais, o que muda com e sem ele.</p></div>
+  <div class="card"><div class="bloco-t">Taxa justa de mercado hoje</div><div class="grande" data-k="taxa_justa">${fPct(N.taxa_justa)} ao ano</div>
+    <p class="peq" style="margin-top:6px">É a taxa fixa que tornaria justo, para os dois lados, um swap ${cond}${N.data_taxa ? ` (taxa de ${fD(N.data_taxa)})` : ''}. <b>Abaixo dela você já entra perdendo</b>; a diferença fica com o banco.</p></div>
+  <div class="card" id="sim-novo"><div class="bloco-t">Simulação</div>
+    <p class="peq" style="margin:0">Escolha o ponto de partida. O padrão são as condições de mercado de hoje.</p>
+    <div class="presets" role="group" aria-label="Ponto de partida">
+      <button type="button" data-pre="mercado"><span>Mercado hoje</span><small>${fTaxa(N.taxa_justa)}</small></button>
+      ${of ? `<button type="button" data-pre="oferta"><span>Última oferta do assessor</span><small>${fTaxa(of.taxa)}${num(of.valor) ? ' · ' + fR(of.valor) : ''}</small></button>` : ''}
+      <button type="button" data-pre="livre"><span>Personalizada</span><small>você ajusta</small></button>
+    </div>
+    <div class="ctrl"><div class="lbl"><label for="nsValor" style="margin:0">Valor do novo swap</label><b id="nsValorTxt"></b></div>
+      <input id="nsValor" type="range" min="${vMin}" max="${vMax}" step="10000" aria-describedby="nsValorTxt"></div>
+    <div class="ctrl"><div class="lbl"><label for="nsTaxa" style="margin:0">Taxa fixa que você receberia</label><b id="nsTaxaTxt"></b></div>
+      <input id="nsTaxa" type="range" min="${tMin}" max="${tMax}" step="0.05" aria-describedby="nsTaxaTxt"></div>
+    <p class="nota" style="margin:8px 0 0">Condições fixas: ${cond}.</p>
+    <div id="nsRes"></div>
+  </div>
+  <div class="card"><div class="bloco-t">Pedir a proposta por escrito</div>
+    <p class="peq" style="margin:0 0 8px">Antes de decidir, peça ao assessor os números oficiais desta proposta. O app só monta a mensagem.</p>
+    <textarea id="nsMsg" class="msgbox" readonly rows="8"></textarea>
+    <div class="acoes"><a class="btn prim" id="nsMail" target="_blank" rel="noopener" href="#">Abrir e-mail</a><a class="btn" id="nsWa" target="_blank" rel="noopener" href="#">Abrir WhatsApp</a><button type="button" class="btn" id="nsCopiar">Copiar mensagem</button><button type="button" class="btn precisa-login" id="nsAnotar">Anotar no diário</button></div>
+    <button type="button" class="btn" id="nsGuardar" style="margin-top:10px">Guardar estes valores como a última oferta do assessor</button>
+    <div class="msg" id="nsGuardarMsg"></div></div>
+  <p class="nota">Simulação própria${N.simulacao_de ? ' de ' + fD(N.simulacao_de) : ''}, com margem grande; serve para ter noção, não para prever. “A soma chegar a zero” = sair de todos os swaps juntos, com um compensando o outro; é diferente de cada swap chegar a zero sozinho (aba Carteira).</p>
+  <div class="destaque-fixo">O app mostra os números; a decisão é sua. Não é recomendação de investimento.</div>`;
+
+  const elV = $('nsValor'), elT = $('nsTaxa'), S0 = N.sem_novo, EST = {valor: vPad, taxa: N.taxa_justa};
+  const marcar = modo => sec.querySelectorAll('.presets button').forEach(b => b.classList.toggle('on', b.dataset.pre === modo));
+  const atualizar = () => {
+    const valor = EST.valor, taxa = EST.taxa;
+    $('nsValorTxt').textContent = fR(valor); $('nsTaxaTxt').textContent = fTaxa(taxa) + ' ao ano';
+    const ce = custoEntrada(N, valor, taxa), g = naGrade(N, valor, taxa), dif = num(N.taxa_justa) ? N.taxa_justa - taxa : null;
+    let h = '';
+    if (num(ce)) {
+      const r = Math.round(ce), tol = Math.max(50, 0.015 * valor);
+      h += `<div class="entrada ${r < -tol ? 'neg' : r > tol ? 'pos' : ''}"><div class="bloco-t" style="margin:0 0 2px">No dia da entrada</div>` +
+        (r < -tol ? `<div class="medio neg" data-k="ns_entrada">Você entra perdendo ${fR(ce)}</div><p class="peq" style="margin:4px 0 0">A taxa está ${fPP(dif)} abaixo da justa. Essa diferença, em reais, é o que fica com o banco logo na contratação.</p>`
+         : r > tol ? `<div class="medio pos" data-k="ns_entrada">Você entra ganhando ${fR(ce)}</div><p class="peq" style="margin:4px 0 0">A taxa está acima da justa de mercado. É raro o banco oferecer isso; confira os termos por escrito.</p>`
+         : `<div class="medio" data-k="ns_entrada">Você entra no zero a zero</div><p class="peq" style="margin:4px 0 0">A taxa é praticamente a justa de mercado (diferença de ${fR(ce)} no primeiro dia).</p>`) + '</div>';
+    }
+    if (g && S0) {
+      const lin = (rot, a, b, cls) => `<div>${rot}</div><div>${a}</div><div class="${cls || ''}">${b}</div>`;
+      h += `<div class="duas"><div>Até jan/2030</div><div>Sem o novo</div><div>Com o novo</div>` +
+        lin('Chance de a soma de todos chegar a zero', faixaCurta(S0.chance_zerar_carteira), `<span data-k="ns_chance">${faixaCurta(g.chance)}</span>`) +
+        lin('Resultado típico, sem encerrar nada', fRs(S0.tipico), `<span data-k="ns_tipico">${fRs(g.tipico)}</span>`, cor(g.tipico)) +
+        lin('Cenário ruim (1 em cada 10)', fRs(S0.pior_caso), `<span data-k="ns_pior">${fRs(g.pior_caso)}</span>`, 'neg') +
+        lin('Chance de terminar pior que hoje', faixaCurta(S0.prob_pior_que_hoje), faixaCurta(g.pior_hoje)) + '</div>';
+      const dCh = Math.round(((g.chance.min + g.chance.max) - (S0.chance_zerar_carteira.min + S0.chance_zerar_carteira.max)) * 50), dP = g.pior_caso - S0.pior_caso;
+      h += `<p style="margin:10px 0 0"><b>Em poucas palavras:</b> a chance de a soma chegar a zero ${dCh > 0 ? 'sobe cerca de ' + dCh + ' ponto' + (dCh > 1 ? 's' : '') + ' percentua' + (dCh > 1 ? 'is' : 'l') : dCh < 0 ? 'cai cerca de ' + (-dCh) + ' ponto' + (dCh < -1 ? 's' : '') + ' percentua' + (dCh < -1 ? 'is' : 'l') : 'quase não muda'}, e o cenário ruim ${Math.round(dP) < 0 ? 'piora em ' + fR(dP) : Math.round(dP) > 0 ? 'melhora em ' + fR(dP) : 'não muda'}.</p>` +
+        `<p class="peq" style="margin:6px 0 0">Chance de este novo swap compensar sozinho a perda do 2030 maior: ${faixaCurta(g.c2030)}.</p>` +
+        `<p class="peq" style="margin:6px 0 0">O resultado típico varia muito conforme a hipótese: sem o novo, de ${fRs(S0.tipico_faixa.min)} a ${fRs(S0.tipico_faixa.max)}; com o novo, de ${fRs(g.tipico_faixa.min)} a ${fRs(g.tipico_faixa.max)}.</p>`;
+    } else h += '<p class="mut" style="margin-top:10px">As chances não estão disponíveis neste resumo; só a conta do dia da entrada.</p>';
+    $('nsRes').innerHTML = h;
+    const m = `${nomeAssessor()}, ${saud()}.\n\nSobre a proposta de um novo swap, peço que me enviem por escrito, antes de qualquer decisão:\n1. o valor da operação, a taxa fixa que eu receberia, o percentual do CDI que eu pagaria e o vencimento;\n2. a taxa justa de mercado no dia para essas mesmas condições;\n3. o valor de saída da operação no próprio dia da contratação;\n4. a remuneração do banco e do escritório nessa operação.\n\nPara referência, estou avaliando ${fR(valor)} a ${fTaxa(taxa)} ao ano, ${cond}. Pelo meu acompanhamento, a taxa justa de mercado para essas condições está perto de ${fTaxa(N.taxa_justa)} ao ano.\n\nNão é uma ordem de contratação.\n\nObrigado,\nAnderson`;
+    $('nsMsg').value = m; const L = linksContato('Proposta de novo swap: pedido de informações — Anderson', m); $('nsMail').href = L.mail; $('nsWa').href = L.wa;
+  };
+  const aplicar = modo => {
+    const lim = (x, a, b) => Math.min(Math.max(x, a), b);
+    if (modo === 'oferta' && of) { EST.valor = lim(of.valor || vPad, vMin, vMax); EST.taxa = lim(of.taxa, tMin, tMax); }
+    else if (modo === 'mercado') { EST.valor = lim(vPad, vMin, vMax); EST.taxa = lim(N.taxa_justa, tMin, tMax); }
+    elV.value = EST.valor; elT.value = EST.taxa;
+    marcar(modo); atualizar();
+  };
+  sec.querySelectorAll('.presets button').forEach(b => b.onclick = () => aplicar(b.dataset.pre));
+  elV.addEventListener('input', () => { EST.valor = +elV.value; marcar('livre'); atualizar(); });
+  elT.addEventListener('input', () => { EST.taxa = +elT.value; marcar('livre'); atualizar(); });
+  $('nsCopiar').onclick = e => copiarTexto($('nsMsg'), e.currentTarget);
+  $('nsAnotar').onclick = () => { PRE_DIARIO = {swap:'novo', tipo:'pergunta', texto:$('nsMsg').value}; abrir('diario'); };
+  $('nsGuardar').onclick = () => {
+    try { localStorage.setItem(CHAVE_OFERTA, JSON.stringify({valor:EST.valor, taxa:EST.taxa, data:hojeISO()})); $('nsGuardarMsg').textContent = 'Guardado neste aparelho. Aparece no botão “Última oferta do assessor”.'; $('nsGuardarMsg').className = 'msg ok'; setTimeout(renderNovo, 900); }
+    catch (e) { $('nsGuardarMsg').textContent = 'Não foi possível guardar neste aparelho.'; $('nsGuardarMsg').className = 'msg err'; }
+  };
+  aplicar('mercado');
 }
 
 // ====================================================================================================

@@ -203,3 +203,19 @@ details dd{margin:0;text-align:right;overflow-wrap:anywhere}
 @media (min-width:761px){.doc-wrap{height:calc(100dvh - 150px)}}
 #quadro{border:0;width:1px;min-width:100%;max-width:100%;height:100%;background:var(--bg);display:block;border-radius:8px}
 .links-doc{display:grid;gap:8px}
+
+/* ---- Novo swap: simulação padrão e personalizada */
+.presets{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:8px 0 4px}
+.presets button{min-height:44px;border-radius:10px;border:1.5px solid var(--line);background:var(--bg);color:var(--fg);font:inherit;font-weight:650;padding:8px 10px;cursor:pointer;min-width:0}
+.presets button.on{border-color:var(--s1);background:var(--s1);color:var(--on)}
+.presets button small{display:block;font-weight:500;font-size:.78rem;opacity:.85}
+.ctrl{margin:12px 0 0}.ctrl .lbl{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:.9rem;color:var(--fg2)}
+.ctrl .lbl b{font-size:1.15rem;color:var(--fg);font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;max-width:100%;min-width:0;padding:0;margin:6px 0 0;height:32px;border:0;background:transparent;accent-color:var(--s1)}
+.duas{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr);gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:10px;font-size:.92rem}
+.duas>div{padding:8px 10px;border-top:1px solid var(--line);min-width:0;overflow-wrap:anywhere}
+.duas>div:nth-child(-n+3){border-top:0;font-weight:700;font-size:.8rem;color:var(--fg2);text-transform:uppercase;letter-spacing:.02em}
+.duas>div:nth-child(3n+2),.duas>div:nth-child(3n){text-align:right;font-variant-numeric:tabular-nums}
+.duas>div:nth-child(3n){background:rgba(127,127,127,.08);font-weight:650}
+.entrada{border-radius:10px;padding:10px 12px;margin-top:10px;border:1.5px solid var(--line)}
+.entrada.neg{border-color:var(--vm)}.entrada.pos{border-color:var(--vd)}
