@@ -219,3 +219,13 @@ input[type=range]{width:100%;max-width:100%;min-width:0;padding:0;margin:6px 0 0
 .duas>div:nth-child(3n){background:rgba(127,127,127,.08);font-weight:650}
 .entrada{border-radius:10px;padding:10px 12px;margin-top:10px;border:1.5px solid var(--line)}
 .entrada.neg{border-color:var(--vm)}.entrada.pos{border-color:var(--vd)}
+
+/* ---- Inflação e juros */
+.gpct{width:100%;height:auto;display:block;margin-top:8px}
+.gpct text{font-size:11px;fill:var(--fg2)}
+.leg2{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:.8rem;color:var(--fg2);margin-top:4px}
+.leg2 i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.tend{display:inline-block;font-weight:700;padding:2px 10px;border-radius:999px;border:1.5px solid var(--line);font-size:.9rem}
+.tres3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:8px;font-size:.85rem;color:var(--fg2)}
+.tres3 b{display:block;font-size:1rem;color:var(--fg);font-variant-numeric:tabular-nums}
+.lista-sinais{margin:0;padding-left:18px}.lista-sinais li{margin:0 0 8px}

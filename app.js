@@ -34,7 +34,8 @@ const TELAS = [
   {id:'s35',      rot:'2035',                grupo:'Seus swaps',   icone:'swap',     barra:true, tipo:'swap', dados:true},
   {id:'s30b',     rot:'2030 maior',          grupo:'Seus swaps',   icone:'swap',     barra:true, tipo:'swap', dados:true},
   {id:'carteira', rot:'Carteira',            grupo:'Seus swaps',   icone:'carteira', barra:true, tipo:'carteira', dados:true},
-  {id:'novo',     rot:'Novo swap',           grupo:'Novo contrato',icone:'novo',     tipo:'novo', dados:true, destaque:true},
+  {id:'novo',     rot:'Novo swap',           grupo:'Mercado e novo swap',icone:'novo',     tipo:'novo', dados:true, destaque:true},
+  {id:'inflacao', rot:'Inflação e juros',    grupo:'Mercado e novo swap',icone:'cenarios', tipo:'inflacao', dados:true},
   {id:'diario',   rot:'Diário do assessor',  grupo:'Assessor',     icone:'diario',   tipo:'diario', login:true},
   {id:'roteiro',  rot:'O que pedir ao banco',grupo:'Assessor',     icone:'pedir',    tipo:'roteiro'},
   {id:'enviar',   rot:'Enviar',              grupo:'Assessor',     icone:'enviar',   tipo:'enviar', login:true},
@@ -241,6 +242,7 @@ async function abrir(v, urg){
   if (t.tipo === 'swap') renderSwap(t.id);
   else if (t.tipo === 'carteira') renderCarteira();
   else if (t.tipo === 'novo') renderNovo();
+  else if (t.tipo === 'inflacao') renderInflacao();
   else if (t.tipo === 'roteiro') renderRoteiro();
   else if (t.tipo === 'doc') return LOCAL ? renderDocLocal(t.id) : carregarDoc(t.id, urg);
   else if (t.tipo === 'dados') { if (!LOCAL) return mostrarDados(); }
@@ -536,6 +538,7 @@ function naGrade(N, valor, taxa){
   const mil = v => Math.round(v / 1000) * 1000;
   return {chance: {min: out.chance_min, max: out.chance_max}, tipico: mil(out.tipico), tipico_faixa: {min: mil(out.tipico_min), max: mil(out.tipico_max)},
           pior_caso: mil(out.pior_caso), pior_hoje: {min: out.pior_hoje_min, max: out.pior_hoje_max}, c2030: {min: out.c2030_min, max: out.c2030_max},
+          cen: G.tem_cenarios ? {otimista: mil(out.cen_otimista), base: mil(out.cen_base), premio: mil(out.cen_premio), estresse: mil(out.cen_estresse)} : null,
           fora: valor < V[0] || valor > V[V.length - 1] || taxa < T[0] || taxa > T[T.length - 1]};
 }
 const CHAVE_OFERTA = 'ofertaAssessorV1';
@@ -633,6 +636,9 @@ function renderNovo(){
       const dCh = Math.round(((g.chance.min + g.chance.max) - (S0.chance_zerar_carteira.min + S0.chance_zerar_carteira.max)) * 50), dP = g.pior_caso - S0.pior_caso;
       h += `<p style="margin:10px 0 0"><b>Em poucas palavras:</b> a chance de a soma chegar a zero ${dCh > 0 ? 'sobe cerca de ' + dCh + ' ponto' + (dCh > 1 ? 's' : '') + ' percentua' + (dCh > 1 ? 'is' : 'l') : dCh < 0 ? 'cai cerca de ' + (-dCh) + ' ponto' + (dCh < -1 ? 's' : '') + ' percentua' + (dCh < -1 ? 'is' : 'l') : 'quase não muda'}, e o cenário ruim ${Math.round(dP) < 0 ? 'piora em ' + fR(dP) : Math.round(dP) > 0 ? 'melhora em ' + fR(dP) : 'não muda'}.</p>` +
         `<p class="peq" style="margin:6px 0 0">Chance de este novo swap compensar sozinho a perda do 2030 maior: ${faixaCurta(g.c2030)}.</p>` +
+        ((g.cen && S0.por_cenario && N.cenarios) ? `<div class="bloco-t" style="margin:14px 0 0">E se… resultado típico em jan/2030, em cada cenário de juros</div><div class="duas"><div>Cenário</div><div>Sem o novo</div><div>Com o novo</div>` +
+          N.cenarios.map(cn => `<div><b>${esc(cn.nome)}</b><br><small class="peq">${esc(cn.explica)}</small></div><div class="${cor(S0.por_cenario[cn.id])}">${fRs(S0.por_cenario[cn.id])}</div><div class="${cor(g.cen[cn.id])}" data-k="ns_cen_${cn.id}">${fRs(g.cen[cn.id])}</div>`).join('') +
+          `</div><p class="peq" style="margin:6px 0 0">O novo swap ajuda quando os juros caem e piora o resultado quando a inflação e os juros sobem. A tela “Inflação e juros” mostra para onde a inflação está indo.</p>` : '') +
         `<p class="peq" style="margin:6px 0 0">O resultado típico varia muito conforme a hipótese: sem o novo, de ${fRs(S0.tipico_faixa.min)} a ${fRs(S0.tipico_faixa.max)}; com o novo, de ${fRs(g.tipico_faixa.min)} a ${fRs(g.tipico_faixa.max)}.</p>`;
     } else h += '<p class="mut" style="margin-top:10px">As chances não estão disponíveis neste resumo; só a conta do dia da entrada.</p>';
     $('nsRes').innerHTML = h;
@@ -697,6 +703,78 @@ function renderNovo(){
     };
   }
   aplicar('mercado');
+}
+
+// ====================================================================================================
+// 9b. INFLAÇÃO E JUROS (Brasil e EUA, 24 meses)
+// ====================================================================================================
+const MESES_EXT = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+const fMesAno = m => m ? MESES_EXT[+String(m).slice(5,7) - 1] + ' de ' + String(m).slice(0,4) : '—';
+const fMesCurto = m => MESES[+String(m).slice(5,7) - 1] + '/' + String(m).slice(2,4);
+const fP2 = v => num(v) ? v.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}) + '%' : '—';
+const fVar = v => !num(v) ? '—' : (Math.abs(v) < 0.005 ? 'igual' : (v > 0 ? 'subiu ' : 'caiu ') + Math.abs(v).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}) + (Math.abs(v) >= 2 ? ' pontos' : ' ponto'));
+// gráfico simples de linhas em % (SVG próprio). linhas: [{serie:[[rotulo, valor]], cor, tracejar:[rotulos]}]
+function graficoPct(linhas, rotX){
+  const W = 340, H = 150, pl = 34, pr = 8, pt = 8, pb = 20;
+  const todos = linhas.flatMap(l => l.serie.map(p => p[1])); if (todos.length < 2) return '';
+  let lo = Math.floor(Math.min(...todos) - 0.3), hi = Math.ceil(Math.max(...todos) + 0.3); if (hi - lo < 2) hi = lo + 2;
+  const n = Math.max(...linhas.map(l => l.serie.length));
+  const X = i => pl + (W - pl - pr) * i / (n - 1), Y = v => pt + (H - pt - pb) * (hi - v) / (hi - lo);
+  let g = '';
+  for (let v = lo; v <= hi; v += Math.max(1, Math.round((hi - lo) / 4))) g += `<line x1="${pl}" x2="${W - pr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="var(--line)" stroke-width="1"/><text x="${pl - 5}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end">${v}%</text>`;
+  linhas.forEach(l => {
+    const off = n - l.serie.length, d = l.serie.map((p, i) => (i ? 'L' : 'M') + X(i + off).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join('');
+    g += `<path d="${d}" fill="none" stroke="${l.cor}" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    const u = l.serie[l.serie.length - 1]; g += `<circle cx="${X(n - 1).toFixed(1)}" cy="${Y(u[1]).toFixed(1)}" r="3.4" fill="${l.cor}"/>`;
+  });
+  g += `<text x="${pl}" y="${H - 5}">${esc(rotX[0])}</text><text x="${((pl + W - pr) / 2).toFixed(0)}" y="${H - 5}" text-anchor="middle">${esc(rotX[1])}</text><text x="${W - pr}" y="${H - 5}" text-anchor="end">${esc(rotX[2])}</text>`;
+  return `<svg class="gpct" viewBox="0 0 ${W} ${H}" role="img" aria-label="Gráfico dos últimos 24 meses">${g}</svg>`;
+}
+function cartaoInflacao(titulo, B, nomeIndice, meta, extra){
+  if (!B || !B.serie || B.serie.length < 2) return `<div class="card"><div class="bloco-t">${titulo}</div><p class="mut">Sem dados nesta atualização.</p></div>`;
+  const T = B.tendencia || {}, of = B.serie.filter(p => !(B.estimados || []).includes(p[0]));
+  const linhas = [{serie: of, cor: 'var(--s1)'}].concat(extra && extra.serie && extra.serie.length > 1 ? [{serie: extra.serie.filter(p => !(extra.estimados || []).includes(p[0])), cor: 'var(--am)'}] : []);
+  const rx = [fMesCurto(of[0][0]), fMesCurto(of[Math.floor(of.length / 2)][0]), fMesCurto(of[of.length - 1][0])];
+  return `<div class="card"><div class="bloco-t">${titulo}</div>
+    <div class="grande" data-k="${B === (R.inflacao || {}).br ? 'ipca' : 'cpi'}">${fP2(B.ultimo.valor)}</div>
+    <div class="sub-p">${nomeIndice} em 12 meses, até ${fMesAno(B.ultimo.mes)}.</div>
+    <p style="margin:10px 0 0">Direção recente: <span class="tend">${esc(T.rotulo || '—')}</span></p>
+    <div class="tres3"><div>em 3 meses<b>${fVar(T.var_3m)}</b></div><div>em 6 meses<b>${fVar(T.var_6m)}</b></div><div>em 12 meses<b>${fVar(T.var_12m)}</b></div></div>
+    ${graficoPct(linhas, rx)}
+    <div class="leg2"><span><i style="background:var(--s1)"></i>${nomeIndice}</span>${extra && extra.rotulo ? `<span><i style="background:var(--am)"></i>${extra.rotulo}</span>` : ''}</div>
+    <p class="peq" style="margin:8px 0 0">Nos últimos 24 meses variou entre ${fP2(T.minimo_24m)} e ${fP2(T.maximo_24m)}. ${meta}</p>
+    ${extra && extra.texto ? `<p class="peq" style="margin:6px 0 0">${extra.texto}</p>` : ''}
+    ${B.estimativa_recente ? `<p class="peq" style="margin:6px 0 0">${fMesAno(B.estimativa_recente.mes)}: cerca de ${B.estimativa_recente.valor.toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1})}%. É uma estimativa: o índice do mesmo mês do ano anterior não foi publicado, então a comparação de 12 meses é aproximada e não entra no gráfico.</p>` : ''}
+    ${B.focus && B.focus.anos ? `<p class="peq" style="margin:6px 0 0">O que o mercado espera (pesquisa do Banco Central de ${fD(B.focus.data)}): ${Object.entries(B.focus.anos).map(([a, v]) => fP2(v) + ' em ' + a).join(', ')}.</p>` : ''}</div>`;
+}
+function renderInflacao(){
+  const sec = $('tela-inflacao');
+  if (!R) { sec.innerHTML = vazioResumo(); return; }
+  const I = R.inflacao, J = R.juros || {};
+  if (!I) { sec.innerHTML = '<div class="card"><h2>Inflação e juros</h2><p class="mut">O resumo enviado pelo PC ainda não traz estes dados. Eles entram na próxima atualização.</p></div>'; return; }
+  const E = I.eua, nuc = E && E.nucleo_ultimo;
+  let h = `<div class="card"><div class="bloco-t">Por que olhar isto</div><p style="margin:0">Os seus swaps ganham quando os juros caem. Os bancos centrais só cortam juros com a inflação sob controle. <b>Inflação subindo = juros altos por mais tempo = mais demora para os swaps chegarem a zero.</b> Um novo swap é a mesma aposta: também perde se a inflação voltar a subir.</p></div>`;
+  h += cartaoInflacao('Brasil', I.br, 'IPCA', 'A meta do Banco Central é 3% ao ano, com tolerância até 4,5%.', null);
+  h += cartaoInflacao('Estados Unidos', E, 'Inflação ao consumidor', 'O objetivo do banco central americano é 2% ao ano.',
+        nuc ? {serie: E.nucleo, estimados: E.estimados_nucleo, rotulo: 'Sem alimentos e energia', texto: `Tirando alimentos e energia, que oscilam muito, a inflação americana está em ${fP2(nuc.valor)} (${esc((E.nucleo_tendencia || {}).rotulo || '')}). Quando o índice cheio sobe e essa medida fica parada, a alta vem dos itens voláteis.`} : null);
+  const jl = (rot, o, obs) => o ? `<div class="of"><div><b>${rot}</b><div class="peq">${obs}</div></div><div class="d">${fP2(o.hoje)}<div class="peq">há 3 meses: ${fP2(o.ha_3m)}<br>há 12 meses: ${fP2(o.ha_12m)}</div></div></div>` : '';
+  h += `<div class="card"><div class="bloco-t">Juros hoje</div>
+    ${num(J.selic) ? `<div class="of"><div><b>Juro básico do Brasil (Selic)</b><div class="peq">é o que define o CDI que você paga nos swaps</div></div><div class="d">${fP2(J.selic)}</div></div>` : ''}
+    ${jl('Juros longos no Brasil', J.br_longo, 'taxa de mercado para cerca de 8 anos; é ela que move o valor de saída dos swaps')}
+    ${jl('Juros de 10 anos nos EUA', J.eua_10a, 'quando sobem, costumam puxar os juros longos do Brasil para cima')}</div>`;
+  h += `<div class="card"><div class="bloco-t">Sinais que o mercado acompanha</div>
+    <p class="peq" style="margin:0 0 8px">Nenhum deles diz a hora certa de entrar ou sair. Eles mostram para que lado o risco está maior.</p>
+    <ul class="lista-sinais">
+      <li><b>Inflação em 12 meses e sua direção</b> (os dois quadros acima): é o que mais pesa na decisão dos bancos centrais.</li>
+      <li><b>Expectativa de inflação do mercado</b> (pesquisa semanal do Banco Central): se sobe semana após semana, o corte de juros fica mais distante.</li>
+      <li><b>Comunicados do Banco Central do Brasil e do americano</b>: dizem se o próximo passo é cortar, manter ou subir.</li>
+      <li><b>Juros longos</b> (quadro acima): caindo por várias semanas, os swaps melhoram; subindo, pioram.</li>
+      <li><b>Dólar e contas do governo</b>: dólar em alta e piora fiscal costumam empurrar os juros longos para cima.</li>
+      <li><b>Juros de 10 anos dos EUA</b>: se sobem, dificultam a queda dos juros aqui.</li>
+    </ul>
+    <p class="peq" style="margin:0">O “Termômetro dos sinais”, em Painel técnico, soma vários desses itens todo dia.</p></div>`;
+  h += `<p class="nota">Fontes: IBGE, pela série do Banco Central (IPCA); BLS, o instituto de estatísticas do trabalho dos EUA (inflação americana); Tesouro americano (juros de 10 anos). “Direção recente” compara a taxa de hoje com a de 3 e 6 meses atrás; não é previsão.</p>`;
+  sec.innerHTML = h;
 }
 
 // ====================================================================================================
