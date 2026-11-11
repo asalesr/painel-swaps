@@ -540,8 +540,25 @@ function naGrade(N, valor, taxa){
 }
 const CHAVE_OFERTA = 'ofertaAssessorV1';
 function ofertaSalva(N){
-  try { const o = JSON.parse(localStorage.getItem(CHAVE_OFERTA) || 'null'); if (o && num(o.valor) && num(o.taxa)) return o; } catch (e) {}
-  return N.oferta_assessor && num(N.oferta_assessor.taxa) ? N.oferta_assessor : null;
+  const srv = N.oferta_assessor && num(N.oferta_assessor.taxa) ? N.oferta_assessor : null;
+  let loc = null;
+  try { const o = JSON.parse(localStorage.getItem(CHAVE_OFERTA) || 'null'); if (o && num(o.valor) && num(o.taxa)) loc = o; } catch (e) {}
+  if (loc && srv) return String(loc.data || '') > String(srv.data || '') ? loc : srv;     // a mais recente
+  return loc || srv;
+}
+// ---- registro da proposta oficial: a 1ª linha do texto é lida pelo PC; o resto é para você ler no diário
+function linhaProposta(o){
+  const n = (k, v, casas) => num(v) ? '|' + k + '=' + v.toFixed(casas) : '';
+  return 'PROPOSTA' + n('valor', o.valor, 2) + n('taxa', o.taxa, 4) + n('cdi', o.cdi, 2) + (o.venc ? '|venc=' + o.venc : '') + (o.data ? '|data=' + o.data : '') +
+    n('justa', o.justa, 4) + n('saida', o.saida, 2) + n('rem', o.rem, 2);
+}
+function textoProposta(o){
+  let t = `Proposta de novo swap recebida do banco: ${fR(o.valor)} a ${fTaxa(o.taxa)} ao ano, pagando ${o.cdi.toLocaleString('pt-BR')}% do CDI, vencimento ${fD(o.venc)}. Data da proposta: ${fD(o.data)}.`;
+  if (num(o.justa)) t += ` Taxa justa de mercado informada pelo banco: ${fTaxa(o.justa)} ao ano.`;
+  if (num(o.saida)) t += ` Valor de saída no dia da contratação informado pelo banco: ${fRs(o.saida)}.`;
+  if (num(o.rem)) t += ` Remuneração do banco e do escritório informada: ${fR(o.rem)}.`;
+  if (o.obs) t += ' Observação: ' + o.obs;
+  return t;
 }
 const fTaxa = t => t.toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2}) + '%';
 function renderNovo(){
@@ -570,12 +587,25 @@ function renderNovo(){
     <p class="nota" style="margin:8px 0 0">Condições fixas: ${cond}.</p>
     <div id="nsRes"></div>
   </div>
-  <div class="card"><div class="bloco-t">Pedir a proposta por escrito</div>
-    <p class="peq" style="margin:0 0 8px">Antes de decidir, peça ao assessor os números oficiais desta proposta. O app só monta a mensagem.</p>
-    <textarea id="nsMsg" class="msgbox" readonly rows="8"></textarea>
-    <div class="acoes"><a class="btn prim" id="nsMail" target="_blank" rel="noopener" href="#">Abrir e-mail</a><a class="btn" id="nsWa" target="_blank" rel="noopener" href="#">Abrir WhatsApp</a><button type="button" class="btn" id="nsCopiar">Copiar mensagem</button><button type="button" class="btn precisa-login" id="nsAnotar">Anotar no diário</button></div>
-    <button type="button" class="btn" id="nsGuardar" style="margin-top:10px">Guardar estes valores como a última oferta do assessor</button>
-    <div class="msg" id="nsGuardarMsg"></div></div>
+  <div class="card"><div class="bloco-t">1. Pedir a proposta ao assessor</div>
+    <p class="peq" style="margin:0 0 8px">A mensagem já vai com os campos para o assessor preencher. São exatamente os números que o app precisa. O app só monta a mensagem; quem envia é você.</p>
+    <textarea id="nsMsg" class="msgbox" readonly rows="10"></textarea>
+    <div class="acoes"><a class="btn prim" id="nsMail" target="_blank" rel="noopener" href="#">Abrir e-mail</a><a class="btn" id="nsWa" target="_blank" rel="noopener" href="#">Abrir WhatsApp</a><button type="button" class="btn" id="nsCopiar">Copiar mensagem</button><button type="button" class="btn precisa-login" id="nsAnotar">Anotar no diário</button></div></div>
+  <div class="card precisa-login"><div class="bloco-t">2. Registrar a resposta do banco</div>
+    <p class="peq" style="margin:0 0 4px">Quando a resposta chegar por e-mail ou WhatsApp, copie os números para cá. Ela fica guardada no diário, vira a “Última oferta do assessor” e o app passa a comparar os números do banco com a conta própria. Deixe em branco o que o banco não informou.</p>
+    <div class="lin"><label for="pValor">1. Valor da operação (R$)</label><input id="pValor" inputmode="decimal" placeholder="ex.: 100.000"></div>
+    <div class="lin"><label for="pTaxa">2. Taxa fixa que você receberia (% ao ano)</label><input id="pTaxa" inputmode="decimal" placeholder="ex.: 19,00"></div>
+    <div class="lin"><label for="pCdi">3. Percentual do CDI que você pagaria (%)</label><input id="pCdi" inputmode="decimal" placeholder="ex.: 135"></div>
+    <label for="pVenc">4. Vencimento</label><input id="pVenc" type="date">
+    <label for="pData">5. Data da proposta</label><input id="pData" type="date">
+    <div class="lin"><label for="pJusta">6. Taxa justa de mercado no dia, segundo o banco (% ao ano)</label><input id="pJusta" inputmode="decimal" placeholder="opcional"></div>
+    <div class="lin"><label for="pSaida">7. Valor de saída no dia da contratação, segundo o banco (R$; use o sinal de menos se for contra você)</label><input id="pSaida" inputmode="decimal" placeholder="opcional"></div>
+    <div class="lin"><label for="pRem">8. Remuneração do banco e do escritório (R$)</label><input id="pRem" inputmode="decimal" placeholder="opcional"></div>
+    <label for="pObs">Observação (opcional)</label><textarea id="pObs" rows="2" maxlength="600"></textarea>
+    <button class="pri" id="pBtn" type="button">Registrar a proposta</button>
+    <div class="msg" id="pMsg"></div></div>
+  <div class="card so-celular"><p style="margin:0">Para registrar a resposta do banco, use o app do celular (precisa de login).</p></div>
+  <div id="nsOficial"></div>
   <p class="nota">Simulação própria${N.simulacao_de ? ' de ' + fD(N.simulacao_de) : ''}, com margem grande; serve para ter noção, não para prever. “A soma chegar a zero” = sair de todos os swaps juntos, com um compensando o outro; é diferente de cada swap chegar a zero sozinho (aba Carteira).</p>
   <div class="destaque-fixo">O app mostra os números; a decisão é sua. Não é recomendação de investimento.</div>`;
 
@@ -606,7 +636,7 @@ function renderNovo(){
         `<p class="peq" style="margin:6px 0 0">O resultado típico varia muito conforme a hipótese: sem o novo, de ${fRs(S0.tipico_faixa.min)} a ${fRs(S0.tipico_faixa.max)}; com o novo, de ${fRs(g.tipico_faixa.min)} a ${fRs(g.tipico_faixa.max)}.</p>`;
     } else h += '<p class="mut" style="margin-top:10px">As chances não estão disponíveis neste resumo; só a conta do dia da entrada.</p>';
     $('nsRes').innerHTML = h;
-    const m = `${nomeAssessor()}, ${saud()}.\n\nSobre a proposta de um novo swap, peço que me enviem por escrito, antes de qualquer decisão:\n1. o valor da operação, a taxa fixa que eu receberia, o percentual do CDI que eu pagaria e o vencimento;\n2. a taxa justa de mercado no dia para essas mesmas condições;\n3. o valor de saída da operação no próprio dia da contratação;\n4. a remuneração do banco e do escritório nessa operação.\n\nPara referência, estou avaliando ${fR(valor)} a ${fTaxa(taxa)} ao ano, ${cond}. Pelo meu acompanhamento, a taxa justa de mercado para essas condições está perto de ${fTaxa(N.taxa_justa)} ao ano.\n\nNão é uma ordem de contratação.\n\nObrigado,\nAnderson`;
+    const m = `${nomeAssessor()}, ${saud()}.\n\nSobre a proposta de um novo swap: antes de qualquer decisão, peço que me respondam por escrito preenchendo os campos abaixo.\n\n1. Valor da operação: R$ ______\n2. Taxa fixa que eu receberia: ______% ao ano\n3. Percentual do CDI que eu pagaria: ______%\n4. Vencimento: __/__/____\n5. Data desta proposta e até quando ela vale: __/__/____ (válida até __/__/____)\n6. Taxa justa de mercado, no dia, para essas mesmas condições: ______% ao ano\n7. Valor de saída da operação no próprio dia da contratação: R$ ______ (a meu favor ou contra mim)\n8. Remuneração do banco e do escritório nessa operação: R$ ______\n\nPara referência, estou avaliando ${fR(valor)} a ${fTaxa(taxa)} ao ano, ${cond}. Pelo meu acompanhamento, a taxa justa de mercado para essas condições está perto de ${fTaxa(N.taxa_justa)} ao ano.\n\nNão é uma ordem de contratação.\n\nObrigado,\nAnderson`;
     $('nsMsg').value = m; const L = linksContato('Proposta de novo swap: pedido de informações — Anderson', m); $('nsMail').href = L.mail; $('nsWa').href = L.wa;
   };
   const aplicar = modo => {
@@ -621,10 +651,51 @@ function renderNovo(){
   elT.addEventListener('input', () => { EST.taxa = +elT.value; marcar('livre'); atualizar(); });
   $('nsCopiar').onclick = e => copiarTexto($('nsMsg'), e.currentTarget);
   $('nsAnotar').onclick = () => { PRE_DIARIO = {swap:'novo', tipo:'pergunta', texto:$('nsMsg').value}; abrir('diario'); };
-  $('nsGuardar').onclick = () => {
-    try { localStorage.setItem(CHAVE_OFERTA, JSON.stringify({valor:EST.valor, taxa:EST.taxa, data:hojeISO()})); $('nsGuardarMsg').textContent = 'Guardado neste aparelho. Aparece no botão “Última oferta do assessor”.'; $('nsGuardarMsg').className = 'msg ok'; setTimeout(renderNovo, 900); }
-    catch (e) { $('nsGuardarMsg').textContent = 'Não foi possível guardar neste aparelho.'; $('nsGuardarMsg').className = 'msg err'; }
-  };
+  // proposta oficial registrada (veio do PC): números do banco × conta própria
+  const O = N.oferta_assessor;
+  if (O && O.fonte === 'banco') {
+    const lin = (rot, a, b) => `<div>${rot}</div><div>${a}</div><div>${b}</div>`;
+    let q = `<div class="card"><div class="bloco-t">Proposta oficial registrada${O.data ? ' em ' + fD(O.data) : ''}</div>
+      <p style="margin:0"><b>${fR(O.valor)} a ${fTaxa(O.taxa)} ao ano</b>${num(O.pct_cdi) ? ', pagando ' + O.pct_cdi.toLocaleString('pt-BR') + '% do CDI' : ''}${O.vencimento ? ', vencimento ' + fD(O.vencimento) : ''}.</p>`;
+    if (O.condicoes_diferentes) q += `<div class="aviso" style="margin-top:8px">O percentual do CDI ou o vencimento desta proposta são diferentes dos usados na simulação desta tela (${cond}). As chances abaixo <b>não valem</b> para ela; peça para ampliar a simulação.</div>`;
+    else if (num(O.custo_entrada_proprio) || num(O.saida_dia0)) {
+      q += `<div class="duas"><div>No dia da entrada</div><div>Banco</div><div>Conta própria</div>` +
+        lin('Taxa justa de mercado', num(O.taxa_justa_banco) ? fTaxa(O.taxa_justa_banco) : 'não informou', num(O.taxa_justa_propria) ? fTaxa(O.taxa_justa_propria) : '—') +
+        lin('Valor de saída no primeiro dia', num(O.saida_dia0) ? fRs(O.saida_dia0) : 'não informou', num(O.custo_entrada_proprio) ? fRs(O.custo_entrada_proprio) : '—') + '</div>';
+      if (num(O.saida_dia0) && num(O.custo_entrada_proprio)) { const df = O.saida_dia0 - O.custo_entrada_proprio;
+        q += `<p class="peq" style="margin:8px 0 0">${Math.round(df) === 0 ? 'O valor do banco é igual ao da conta própria' : 'O valor do banco é ' + fR(df) + (df < 0 ? ' pior' : ' melhor') + ' para você do que a conta própria'}${Math.abs(df) > Math.max(2000, 0.02 * O.valor) ? '. É uma diferença grande: vale perguntar ao assessor de onde ela vem.' : ', dentro do esperado.'}</p>`; }
+    }
+    if (num(O.remuneracao)) q += `<p class="peq" style="margin:8px 0 0">Remuneração do banco e do escritório informada: ${fR(O.remuneracao)}.</p>`;
+    $('nsOficial').innerHTML = q + '</div>';
+  }
+  // registrar a resposta do banco: vai para o diário (tabela que só aceita inserir) e o PC lê na próxima atualização
+  if (!LOCAL && $('pBtn')) {
+    if (!$('pData').value) $('pData').value = hojeISO();
+    if (!$('pVenc').value && N.vencimento) $('pVenc').value = N.vencimento;
+    if (!$('pCdi').value && num(N.pct_cdi)) $('pCdi').value = String(N.pct_cdi);
+    $('pBtn').onclick = async () => {
+      const pm = (t, tipo = '') => { $('pMsg').textContent = t; $('pMsg').className = 'msg ' + tipo; };
+      const lePos = id => { const t = $(id).value.trim().replace(/%/g, ''); if (!t) return null; const v = numBR(t.replace(/^R\$\s*/, '')); return isFinite(v) ? v : NaN; };
+      const lePct = id => { const t = $(id).value.trim().replace(/%/g, '').replace(/\s/g, ''); if (!t) return null; return /^\d{1,3}([.,]\d{1,4})?$/.test(t) ? Number(t.replace(',', '.')) : NaN; };
+      const o = {valor: lePos('pValor'), taxa: lePct('pTaxa'), cdi: lePct('pCdi'), venc: $('pVenc').value, data: $('pData').value,
+                 justa: lePct('pJusta'), saida: lerMeta($('pSaida').value), rem: lePos('pRem'), obs: $('pObs').value.trim()};
+      if (!num(o.valor) || o.valor < 10000 || o.valor > 2000000) return pm('Informe o valor da operação (entre R$ 10 mil e R$ 2 milhões).', 'err');
+      if (!num(o.taxa) || o.taxa < 5 || o.taxa > 40) return pm('Informe a taxa fixa em % ao ano (por exemplo, 19,00).', 'err');
+      if (!num(o.cdi) || o.cdi < 80 || o.cdi > 200) return pm('Informe o percentual do CDI (por exemplo, 135).', 'err');
+      if (!o.venc || o.venc <= hojeISO()) return pm('Informe o vencimento (uma data no futuro).', 'err');
+      if (!o.data || o.data > hojeISO()) return pm('Informe a data da proposta (hoje ou antes).', 'err');
+      if ([o.justa, o.rem].some(x => x != null && !num(x)) || (o.saida != null && isNaN(o.saida))) return pm('Algum valor opcional não foi reconhecido.', 'err');
+      if (num(o.justa) && (o.justa < 5 || o.justa > 40)) return pm('A taxa justa informada parece fora do normal; confira.', 'err');
+      $('pBtn').disabled = true; pm('Registrando…');
+      const ins = await sb.from('contatos_assessor').insert({data_contato: o.data, swap: 'novo', tipo: 'resposta_banco', canal: 'email',
+        texto: (linhaProposta(o) + '\n' + textoProposta(o)).slice(0, 2000), cotacao_informada: num(o.saida) ? o.saida : null});
+      $('pBtn').disabled = false;
+      if (ins.error) return pm('Não foi possível registrar: ' + ins.error.message, 'err');
+      try { localStorage.setItem(CHAVE_OFERTA, JSON.stringify({valor: o.valor, taxa: o.taxa, data: o.data})); } catch (e) {}
+      pm('Registrada no diário. Já aparece como “Última oferta do assessor” neste aparelho; a comparação com a conta própria entra na próxima atualização do PC (20h30).', 'ok');
+      setTimeout(renderNovo, 2500);
+    };
+  }
   aplicar('mercado');
 }
 
@@ -662,7 +733,7 @@ function renderDiario(){
   $('dLista').innerHTML = DIARIO.length ? DIARIO.map(r => `<div class="card">
       <div class="peq"><b>${fD(r.data_contato)}</b> · ${esc(D_SWAP[r.swap] || r.swap)} · ${esc(D_TIPO[r.tipo] || r.tipo)} · por ${esc(D_CANAL[r.canal] || r.canal)}</div>
       ${r.cotacao_informada != null ? `<div style="margin-top:6px">Valor informado pelo banco: <b class="${cor(+r.cotacao_informada)}">${fRs(+r.cotacao_informada)}</b></div>` : ''}
-      <p style="white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0 0">${esc(r.texto)}</p>
+      <p style="white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0 0">${esc(String(r.texto || '').replace(/^PROPOSTA\|[^\n]*\n?/, ''))}</p>
       <div class="nota" style="margin:6px 0 0">anotado em ${fdt(r.criado_em)}</div></div>`).join('')
     : '<div class="card"><p class="mut">Nenhum registro ainda.</p></div>';
 }
