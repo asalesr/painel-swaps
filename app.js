@@ -276,7 +276,8 @@ function renderDocLocal(v){
 // 6. TELA DE CADA SWAP
 // ====================================================================================================
 function blocoSemaforo(s){
-  const st = statusEf(s), mot = motivoEf(s), V = s.valor_hoje;
+  const SD = s.saida && s.saida.vale ? s.saida : null;
+  const st = statusEf(s), mot = motivoEf(s), V = SD ? SD.valor : s.valor_hoje;
   let frase = '';
   if (num(V) && st !== 'bloqueado') {
     const ref = st === 'velho' ? `Estimativa de ${fD(R.data_curva)} (desatualizada): se você pedisse para encerrar` : 'Se você pedir para encerrar hoje';
@@ -284,7 +285,10 @@ function blocoSemaforo(s){
     frase = `<div class="frase">${ref}${st === 'velho' ? ' naquele dia' : ''}, ${q}${num(s.erro_reais) ? `, com margem de erro de ± <span data-k="erro_reais">${fR(s.erro_reais)}</span>` : ''}.</div>`;
   }
   const ir = (st === 'sair' || st === 'cotar') ? '<button type="button" class="btn prim" data-ir-pedir>Pedir ao assessor ↓</button>' : '';
-  return `<div class="sem ${st}" data-status="${st}"><div class="rot">${SEM[st].t}</div>${mot ? `<div class="mot">${esc(mot)}</div>` : ''}${frase}<div class="est">É uma estimativa. O valor que vale é a cotação que o banco informar.</div>${ir}</div>`;
+  return `<div class="sem ${st}" data-status="${st}"><div class="rot">${SEM[st].t}</div>${mot ? `<div class="mot">${esc(mot)}</div>` : ''}${frase}<div class="est">${SD
+      ? (Math.round(SD.desconto) < 0 ? `Já inclui ${fR(SD.desconto)} que o banco cobrou a mais do que o valor do extrato na cotação de ${fD(SD.data)}${SD.base === 'estimativa' ? ' (comparada com a estimativa do app, não com o extrato do mesmo dia)' : ''}.`
+                                       : `A cotação de saída de ${fD(SD.data)} veio igual ou melhor que o valor do extrato; o app não desconta nada.`) + ' Continua sendo uma estimativa: o valor que vale é a cotação do dia.'
+      : (s.saida && !s.saida.vale ? `A última cotação de saída é de ${fD(s.saida.data)} e já está antiga; peça uma nova. ` : 'Ainda sem cotação de saída do banco: este é o valor do extrato estimado, e o preço real para sair costuma ser um pouco pior. ') + 'O valor que vale é a cotação que o banco informar.'}</div>${ir}</div>`;
 }
 function linhaTend(txt, reais){
   if (!num(reais)) return '';
@@ -398,7 +402,12 @@ function blocoPedido(s){
     <label for="msg-${s.id}">Mensagem</label>
     <textarea id="msg-${s.id}" class="msgbox" readonly rows="9"></textarea>
     <div class="acoes"><a class="btn prim" data-mail target="_blank" rel="noopener" href="#">Abrir e-mail</a><a class="btn" data-wa target="_blank" rel="noopener" href="#">Abrir WhatsApp</a><button type="button" class="btn" data-copiar>Copiar mensagem</button><button type="button" class="btn precisa-login" data-anotar>Anotar no diário</button></div>
-    <p class="nota" style="margin:0">Os botões só abrem o rascunho. Nada é enviado sem você apertar “enviar”. Depois de enviar, use “Anotar no diário” para guardar o registro.</p></div>`;
+    <p class="nota" style="margin:0">Os botões só abrem o rascunho. Nada é enviado sem você apertar “enviar”. Depois de enviar, use “Anotar no diário” para guardar o registro.</p>
+    <details class="precisa-login" style="margin-top:12px" data-cq><summary><b>Registrar a cotação de saída que o banco informou</b></summary>
+      <p class="peq" style="margin:8px 0 0">É o preço pelo qual o banco encerraria este swap naquele dia. Com ela, o app passa a mostrar o valor real para sair, e não só o do extrato.</p>
+      <div class="lin"><label for="cq-${s.id}">Valor informado (com o sinal de menos se for contra você)</label><input id="cq-${s.id}" inputmode="decimal" placeholder="ex.: -1.234,56"><div class="prev" data-cqprev></div></div>
+      <label for="cd-${s.id}">Data da cotação</label><input id="cd-${s.id}" type="date">
+      <button type="button" class="pri" data-cqbtn>Registrar a cotação</button><div class="msg" data-cqmsg></div></details></div>`;
 }
 function ligarPedido(sec, s){
   const card = sec.querySelector('#pedir-' + s.id); if (!card) return;
@@ -419,6 +428,27 @@ function ligarPedido(sec, s){
   };
   card.querySelectorAll('input[type=radio]').forEach(r => r.addEventListener('change', atualizar));
   card.querySelector('[data-copiar]').onclick = e => copiarTexto(ta, e.currentTarget);
+  const cq = card.querySelector('[data-cq]');
+  if (cq && !LOCAL) {
+    const inV = cq.querySelector('#cq-' + s.id), inD = cq.querySelector('#cd-' + s.id), pv = cq.querySelector('[data-cqprev]'), ms = cq.querySelector('[data-cqmsg]');
+    const cm = (t, tipo = '') => { ms.textContent = t; ms.className = 'msg ' + tipo; };
+    if (!inD.value) inD.value = hojeISO();
+    inV.addEventListener('input', () => { const v = lerMeta(inV.value);
+      pv.innerHTML = v == null ? '' : isNaN(v) ? 'valor não reconhecido' : 'banco informou: <b class="' + cor(v) + '">' + fRs(v) + '</b>' + (v < 0 ? ' (contra você)' : v > 0 ? ' (a seu favor)' : '') +
+        (v > 0 && s.valor_hoje < 0 ? '<br><span class="neg">Atenção: a estimativa de hoje é negativa. Se o banco cobra esse valor, digite com o sinal de menos.</span>' : ''); });
+    cq.querySelector('[data-cqbtn]').onclick = async e => {
+      const v = lerMeta(inV.value), btn = e.currentTarget;
+      if (v == null || isNaN(v)) return cm('Digite o valor informado pelo banco.', 'err');
+      if (!inD.value || inD.value > hojeISO()) return cm('Informe a data da cotação (hoje ou antes).', 'err');
+      btn.disabled = true; cm('Registrando…');
+      const ins = await sb.from('posicao_informada').insert({data_ref: inD.value, tipo: 'saida', [s.id]: v, observacao: 'cotação de saída registrada na aba do swap'});
+      btn.disabled = false;
+      if (ins.error) return cm('Não foi possível registrar: ' + ins.error.message, 'err');
+      await sb.from('contatos_assessor').insert({data_contato: inD.value, swap: s.id, tipo: 'resposta_banco', canal: 'email',
+        texto: 'Cotação firme de saída informada pelo banco: ' + fRs(v) + '.', cotacao_informada: v});     // também fica no diário
+      cm('Registrada. O PC confere e passa a usar na próxima atualização (20h30). Também ficou anotada no diário.', 'ok'); inV.value = ''; pv.textContent = '';
+    };
+  }
   const an = card.querySelector('[data-anotar]');
   if (an) an.onclick = () => {
     const tipo = (card.querySelector('input[type=radio]:checked') || {}).value || 'cot';
@@ -495,7 +525,7 @@ function renderCarteira(){
   const ordem = ['s30a', 's35', 's30b'].map(swapPorId).filter(Boolean);
   const metas = (R.swaps || []).map(s => s.meta), metaTot = metas.every(num) ? metas.reduce((a, b) => a + b, 0) : null;
   const todosZero = metas.length && metas.every(m => m === 0);
-  let h = `<div class="hero ${tipo}"><span class="rot">${rot}</span><b class="valor" data-k="carteira_valor_hoje">${fR(C.valor_hoje)}</b><div class="sub-p">é o que a carteira toda valeria se os três swaps fossem encerrados hoje (estimativa)${num(C.erro_reais) ? `, com margem de erro de ± <span data-k="carteira_erro">${fR(C.erro_reais)}</span>` : ''}. O valor que vale é a cotação que o banco informar.</div></div>`;
+  let h = `<div class="hero ${tipo}"><span class="rot">${rot}</span><b class="valor" data-k="carteira_valor_hoje">${fR(C.valor_hoje)}</b><div class="sub-p">é o que a carteira toda valeria se os três swaps fossem encerrados hoje (estimativa)${num(C.erro_reais) ? `, com margem de erro de ± <span data-k="carteira_erro">${fR(C.erro_reais)}</span>` : ''}. O valor que vale é a cotação que o banco informar.${C.swaps_com_cotacao ? ` Com ${C.swaps_com_cotacao === 1 ? 'a cotação de saída registrada' : 'as cotações de saída registradas'}, o valor para sair de tudo hoje seria perto de <b>${fRs(C.valor_saida)}</b> (${fR(C.desconto_saida)} a mais do que o extrato).` : ''}</div></div>`;
   h += '<div class="bloco-t">Cada swap</div>' + ordem.map(s => {
     const st = statusEf(s);
     return `<button type="button" class="linha-sw" data-ir="${s.id}"><span class="n">${esc(s.rotulo)}</span><span class="v ${cor(s.valor_hoje)}" data-k="${s.id}_valor_hoje">${fRs(s.valor_hoje)}</span><span class="m">Meta: ${esc(fMeta(s.meta))}</span><span class="chip ${st}">${SEM[st].c}</span></button>`;
@@ -951,23 +981,27 @@ async function mostrarEnviar(){
   carregarMetas();
   $('info').textContent = 'Os envios ficam numa área privada; só o seu login grava e lê.';
   if (!$('eData').value) $('eData').value = new Date(Date.now() - new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10);
-  const { data, error } = await sb.from('posicao_informada').select('criado_em,data_ref,s35,s30a,s30b,arquivo,status').order('criado_em',{ascending:false}).limit(10);
+  document.querySelectorAll('#eTipo input').forEach(r => r.onchange = () => document.querySelectorAll('#eTipo .tipo').forEach(l => l.classList.toggle('on', l.querySelector('input').checked)));
+  const { data, error } = await sb.from('posicao_informada').select('criado_em,data_ref,s35,s30a,s30b,arquivo,status,tipo').order('criado_em',{ascending:false}).limit(10);
   $('eHist').innerHTML = error ? '<tr><td>Erro: '+error.message+'</td></tr>' :
-    '<tr><th>Enviado</th><th>Posição de</th><th>Total</th><th>Situação</th></tr>' +
-    (data||[]).map(r => { const t = [r.s35,r.s30a,r.s30b].every(x=>x!=null) ? (+r.s35)+(+r.s30a)+(+r.s30b) : null;
-      return '<tr><td>'+fdt(r.criado_em)+'</td><td>'+r.data_ref.split('-').reverse().join('/')+'</td><td class="'+(t==null?'':cl(t))+'">'+(t==null?'só arquivo':brl(t))+'</td><td style="white-space:normal;text-align:left">'+r.status+'</td></tr>'; }).join('');
+    '<tr><th>Enviado</th><th>Posição de</th><th>O que é</th><th>Total</th><th>Situação</th></tr>' +
+    (data||[]).map(r => { const vs = [r.s35,r.s30a,r.s30b].filter(x=>x!=null), todos3 = vs.length === 3, t = vs.length ? vs.reduce((a,b)=>a+(+b),0) : null;
+      return '<tr><td>'+fdt(r.criado_em)+'</td><td>'+r.data_ref.split('-').reverse().join('/')+'</td><td>'+(r.tipo==='saida'?'Cotação de saída':'Extrato')+'</td><td class="'+(t==null?'':cl(t))+'">'+(t==null?'só arquivo':brl(t)+(todos3?'':' ('+vs.length+' swap'+(vs.length>1?'s':'')+')'))+'</td><td style="white-space:normal;text-align:left">'+esc(r.status)+'</td></tr>'; }).join('');
 }
 $('eBtn').onclick = async () => {
   const eMsg = (t, tipo='') => { $('eMsg').textContent = t; $('eMsg').className = 'msg ' + tipo; };
   const data_ref = $('eData').value, arq = $('eArq').files[0];
   const vals = ['e35','e30a','e30b'].map(i => lerValor($(i).value));
-  const algum = vals.some(v => v != null), todos = vals.every(v => v != null && !isNaN(v));
+  const tipo = (document.querySelector('#eTipo input:checked') || {}).value === 'saida' ? 'saida' : 'marcacao';
+  const algum = vals.some(v => v != null), validos = !vals.some(v => v != null && isNaN(v));
+  const todos = tipo === 'saida' ? (algum && validos) : vals.every(v => v != null && !isNaN(v));     // cotação de saída pode ser de um swap só
   if (!data_ref) return eMsg('Informe a data da posição.', 'err');
-  if (!arq && !todos) return eMsg('Anexe o arquivo ou preencha os 3 valores.', 'err');
-  if (algum && !todos) return eMsg('Preencha os 3 valores (ou deixe os 3 em branco e envie só o arquivo).', 'err');
+  if (!validos) return eMsg('Algum valor não foi reconhecido.', 'err');
+  if (!arq && !todos) return eMsg(tipo === 'saida' ? 'Anexe o arquivo ou preencha a cotação de pelo menos um swap.' : 'Anexe o arquivo ou preencha os 3 valores.', 'err');
+  if (tipo === 'marcacao' && algum && !todos) return eMsg('Preencha os 3 valores (ou deixe os 3 em branco e envie só o arquivo).', 'err');
   if (arq && arq.size > 10*1024*1024) return eMsg('Arquivo maior que 10 MB.', 'err');
   const tot = lerValor($('eTot').value);
-  if (todos && tot != null && !isNaN(tot) && Math.abs(tot - vals.reduce((a,b)=>a+b,0)) > 2) return eMsg('A soma dos 3 valores não confere com o total. Confira antes de enviar.', 'err');
+  if (tipo === 'marcacao' && todos && tot != null && !isNaN(tot) && Math.abs(tot - vals.reduce((a,b)=>a+b,0)) > 2) return eMsg('A soma dos 3 valores não confere com o total. Confira antes de enviar.', 'err');
   $('eBtn').disabled = true; eMsg('Enviando…');
   try {
     let caminho = null;
@@ -978,8 +1012,8 @@ $('eBtn').onclick = async () => {
       if (up.error) throw up.error;
     }
     const ins = await sb.from('posicao_informada').insert({ data_ref, arquivo: caminho,
-      s35: todos ? vals[0] : null, s30a: todos ? vals[1] : null, s30b: todos ? vals[2] : null,
-      total_informado: (todos && tot!=null && !isNaN(tot)) ? tot : null, observacao: $('eObs').value.trim() || null });
+      s35: todos ? vals[0] : null, s30a: todos ? vals[1] : null, s30b: todos ? vals[2] : null, tipo,
+      total_informado: (tipo === 'marcacao' && todos && tot!=null && !isNaN(tot)) ? tot : null, observacao: $('eObs').value.trim() || null });
     if (ins.error) throw ins.error;
     eMsg('Enviado. O PC vai processar na próxima atualização (20h30).', 'ok');
     ['eArq','e35','e30a','e30b','eTot','eObs'].forEach(i => $(i).value = ''); prever();

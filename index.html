@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#2a2e35">
 <title>Painel de Juros</title>
 <script>try{const t=localStorage.getItem('swapsTema');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}</script>
-<link rel="stylesheet" href="app.css?v=20261111d">
+<link rel="stylesheet" href="app.css?v=20261111e">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 </head>
 <body>
@@ -107,8 +107,12 @@
         </div>
 
         <h1 style="margin-top:20px">Enviar atualização do assessor</h1>
-        <p class="mut">Anexe o print ou PDF e, se puder, digite os 3 valores. O PC recebe tudo na próxima atualização (20h30) e, se os valores forem coerentes, recalibra o painel por eles.</p>
+        <p class="mut">Diga primeiro o que são os valores. O PC recebe tudo na próxima atualização (20h30) e confere antes de usar.</p>
         <div class="card">
+          <div class="tipos" role="radiogroup" aria-label="O que são estes valores" id="eTipo">
+            <label class="tipo on"><input type="radio" name="eTipo" value="marcacao" checked><span><b>Valor do extrato</b><small>O valor de cada swap que aparece no extrato ou no print do banco. O app se recalibra por ele. Preencha os três.</small></span></label>
+            <label class="tipo"><input type="radio" name="eTipo" value="saida"><span><b>Cotação firme de saída</b><small>O preço pelo qual o banco encerraria o swap naquele dia. Não recalibra o app: mostra quanto o banco cobra a mais para sair. Pode ser de um swap só.</small></span></label>
+          </div>
           <label for="eData">Data da posição</label><input id="eData" type="date">
           <label for="eArq">Arquivo (print, foto ou PDF, até 10 MB)</label><input id="eArq" type="file" accept="image/*,application/pdf">
           <div class="lin"><label for="e35">Swap 2035 — valor de saída</label><input id="e35" inputmode="decimal" placeholder="ex.: -12.345,67"><div class="prev" id="p35"></div></div>
@@ -128,6 +132,6 @@
 </div>
 
 <!--RESUMO_LOCAL-->
-<script src="app.js?v=20261111d"></script>
+<script src="app.js?v=20261111e"></script>
 </body>
 </html>
