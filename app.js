@@ -292,9 +292,9 @@ function blocoSemaforo(s){
   }
   const ir = (st === 'sair' || st === 'cotar') ? '<button type="button" class="btn prim" data-ir-pedir>Pedir ao assessor ↓</button>' : '';
   return `<div class="sem ${st}" data-status="${st}"><div class="rot">${SEM[st].t}</div>${mot ? `<div class="mot">${esc(mot)}</div>` : ''}${frase}<div class="est">${SD
-      ? (Math.round(SD.desconto) < 0 ? `Já inclui ${fR(SD.desconto)} que o banco cobrou a mais do que o valor do extrato na cotação de ${fD(SD.data)}${SD.base === 'estimativa' ? ' (comparada com a estimativa do app, não com o extrato do mesmo dia)' : ''}.`
-                                       : `A cotação de saída de ${fD(SD.data)} veio igual ou melhor que o valor do extrato; o app não desconta nada.`) + ' Continua sendo uma estimativa: o valor que vale é a cotação do dia.'
-      : (s.saida && !s.saida.vale ? `A última cotação de saída é de ${fD(s.saida.data)} e já está antiga; peça uma nova. ` : 'Ainda sem cotação de saída do banco: este é o valor do extrato estimado, e o preço real para sair costuma ser um pouco pior. ') + 'O valor que vale é a cotação que o banco informar.'}</div>${ir}</div>`;
+      ? (Math.round(SD.desconto) < 0 ? `Já inclui ${fR(SD.desconto)} que o banco cobrou a mais do que o valor de mercado na cotação de ${fD(SD.data)}${SD.base === 'estimativa' ? ' (comparada com a estimativa do app, não com o valor do banco no mesmo dia)' : ''}.`
+                                       : `O app parte do valor para encerrar que o banco informou em ${fD(SD.data)} e não desconta nada.`) + ' Continua sendo uma estimativa: a cotação é indicativa e muda ao longo do dia.'
+      : (s.saida && !s.saida.vale ? `A última cotação de saída é de ${fD(s.saida.data)} e já está antiga; peça uma nova. ` : 'Ainda sem cotação de saída do banco: este é o valor de mercado estimado, e o preço real para sair costuma ser um pouco pior. ') + 'O valor que vale é a cotação que o banco informar.'}</div>${ir}</div>`;
 }
 function linhaTend(txt, reais){
   if (!num(reais)) return '';
@@ -366,6 +366,21 @@ function blocoContrato(s){
     <dt>Vencimento</dt><dd>${fD(c.vencimento)}</dd></dl></details>`;
 }
 
+// ---- o que o banco informou por escrito: valor para encerrar × valor "na curva" do extrato × dia da contratação
+function blocoBanco(s){
+  const B = s.banco;
+  if (!B || !B.data) return '';
+  const lin = (rot, a, b) => `<div>${rot}</div><div>${a}</div><div>${b}</div>`, v = x => num(x) ? fRs(x) : '—';
+  let h = `<div class="card"><div class="bloco-t">O que o banco informou em ${fD(B.data)}</div>
+    <div class="duas"><div>Valor</div><div>Banco</div><div>Conta do app</div>` +
+    (num(B.mercado) ? lin('Para encerrar (valor de mercado)', v(B.mercado), '—') : '') +
+    (num(B.na_curva) ? lin('Na curva (o que aparece no extrato)', v(B.na_curva), v(B.na_curva_propria)) : '') +
+    (num(B.dia0) ? lin('No dia da contratação', v(B.dia0), v(B.dia0_proprio)) : '') + '</div>';
+  h += '<p class="peq" style="margin:8px 0 0">O valor na curva é só o acumulado até hoje entre o que você recebe e o que paga. <b>Ele não é o valor para sair</b>: para encerrar, vale o valor de mercado, que muda todos os dias. O app se calibra pelo valor de mercado informado.</p>';
+  if (num(B.remuneracao)) h += `<p class="peq" style="margin:6px 0 0">Remuneração do banco e do escritório nesta operação, segundo o banco: cerca de ${fR(B.remuneracao)}.</p>`;
+  return h + '</div>';
+}
+
 // ---- pedido ao assessor (uma mensagem por swap)
 const TIPOS_PEDIDO = [
   {v:'cot',  t:'Pedir a cotação de saída (não executa nada)', d: () => 'O banco só informa o preço de saída. Nada é encerrado.'},
@@ -410,7 +425,7 @@ function blocoPedido(s){
     <div class="acoes"><a class="btn prim" data-mail target="_blank" rel="noopener" href="#">Abrir e-mail</a><a class="btn" data-wa target="_blank" rel="noopener" href="#">Abrir WhatsApp</a><button type="button" class="btn" data-copiar>Copiar mensagem</button><button type="button" class="btn precisa-login" data-anotar>Anotar no diário</button></div>
     <p class="nota" style="margin:0">Os botões só abrem o rascunho. Nada é enviado sem você apertar “enviar”. Depois de enviar, use “Anotar no diário” para guardar o registro.</p>
     <details class="precisa-login" style="margin-top:12px" data-cq><summary><b>Registrar a cotação de saída que o banco informou</b></summary>
-      <p class="peq" style="margin:8px 0 0">É o preço pelo qual o banco encerraria este swap naquele dia. Com ela, o app passa a mostrar o valor real para sair, e não só o do extrato.</p>
+      <p class="peq" style="margin:8px 0 0">É o preço pelo qual o banco encerraria este swap naquele dia. Com ela, o app passa a mostrar o valor real para sair, e não só a estimativa.</p>
       <div class="lin"><label for="cq-${s.id}">Valor informado (com o sinal de menos se for contra você)</label><input id="cq-${s.id}" inputmode="decimal" placeholder="ex.: -1.234,56"><div class="prev" data-cqprev></div></div>
       <label for="cd-${s.id}">Data da cotação</label><input id="cd-${s.id}" type="date">
       <button type="button" class="pri" data-cqbtn>Registrar a cotação</button><div class="msg" data-cqmsg></div></details></div>`;
@@ -468,7 +483,7 @@ function renderSwap(id){
   if (!R) { sec.innerHTML = vazioResumo(); return; }
   if (!s) { sec.innerHTML = '<div class="card"><p>Este swap não está no resumo enviado.</p></div>'; return; }
   sec.innerHTML = blocoSemaforo(s) + `<div class="grade">${blocoFalta(s)}${blocoEsperar(s)}</div><div class="grade">${blocoChance(s)}${blocoSeNao(s)}</div>` +
-    (s.serie && s.serie.length > 1 ? blocoGrafico(s) : '') + blocoPedido(s) + blocoContrato(s);
+    (s.serie && s.serie.length > 1 ? blocoGrafico(s) : '') + blocoBanco(s) + blocoPedido(s) + blocoContrato(s);
   const g = sec.querySelector('.graf'); if (g) g._g = {serie:s.serie, meta:s.meta};
   const ir = sec.querySelector('[data-ir-pedir]'); if (ir) ir.onclick = () => sec.querySelector('#pedir-' + s.id).scrollIntoView({behavior:'smooth', block:'start'});
   ligarPedido(sec, s);
@@ -531,15 +546,28 @@ function renderCarteira(){
   const ordem = ['s30a', 's35', 's30b'].map(swapPorId).filter(Boolean);
   const metas = (R.swaps || []).map(s => s.meta), metaTot = metas.every(num) ? metas.reduce((a, b) => a + b, 0) : null;
   const todosZero = metas.length && metas.every(m => m === 0);
-  let h = `<div class="hero ${tipo}"><span class="rot">${rot}</span><b class="valor" data-k="carteira_valor_hoje">${fR(C.valor_hoje)}</b><div class="sub-p">é o que a carteira toda valeria se os três swaps fossem encerrados hoje (estimativa)${num(C.erro_reais) ? `, com margem de erro de ± <span data-k="carteira_erro">${fR(C.erro_reais)}</span>` : ''}. O valor que vale é a cotação que o banco informar.${C.swaps_com_cotacao ? ` Com ${C.swaps_com_cotacao === 1 ? 'a cotação de saída registrada' : 'as cotações de saída registradas'}, o valor para sair de tudo hoje seria perto de <b>${fRs(C.valor_saida)}</b> (${fR(C.desconto_saida)} a mais do que o extrato).` : ''}</div></div>`;
+  let h = `<div class="hero ${tipo}"><span class="rot">${rot}</span><b class="valor" data-k="carteira_valor_hoje">${fR(C.valor_hoje)}</b><div class="sub-p">é o que a carteira toda valeria se os três swaps fossem encerrados hoje (estimativa)${num(C.erro_reais) ? `, com margem de erro de ± <span data-k="carteira_erro">${fR(C.erro_reais)}</span>` : ''}. O valor que vale é a cotação que o banco informar.${C.swaps_com_cotacao ? ` Com ${C.swaps_com_cotacao === 1 ? 'a cotação de saída registrada' : 'as cotações de saída registradas'}, o valor para sair de tudo hoje seria perto de <b>${fRs(C.valor_saida)}</b>${Math.round(C.desconto_saida) < 0 ? ` (${fR(C.desconto_saida)} a mais do que o valor de mercado)` : ''}.` : ''}</div></div>`;
   h += '<div class="bloco-t">Cada swap</div>' + ordem.map(s => {
     const st = statusEf(s);
     return `<button type="button" class="linha-sw" data-ir="${s.id}"><span class="n">${esc(s.rotulo)}</span><span class="v ${cor(s.valor_hoje)}" data-k="${s.id}_valor_hoje">${fRs(s.valor_hoje)}</span><span class="m">Meta: ${esc(fMeta(s.meta))}</span><span class="chip ${st}">${SEM[st].c}</span></button>`;
   }).join('');
   h += '<div class="grade" style="margin-top:12px">';
   if (num(C.custo_mes)) h += `<div class="card"><div class="bloco-t">O que custa esperar, somando os três</div><div class="medio ${cor(C.custo_mes)}" data-k="carteira_custo_mes">${fR(C.custo_mes)} por mês</div><p class="peq" style="margin-top:6px">${Math.round(C.custo_mes) < 0 ? 'É quanto a carteira perde a cada mês parada, se os juros não se mexerem.' : 'É quanto a carteira ganha a cada mês parada, se os juros não se mexerem.'}</p></div>`;
-  if (C.custo_entrada_estimado) h += `<div class="card"><div class="bloco-t">Custo de entrada (estimado)</div><div class="medio" data-k="carteira_entrada">${fR(C.custo_entrada_estimado.min)} a ${fR(C.custo_entrada_estimado.max)}</div><p class="peq" style="margin-top:6px">É uma estimativa do que o banco ganhou, embutido no preço, quando os swaps foram contratados.</p></div>`;
+  const CB = C.banco;
+  if (CB && num(CB.dia0)) h += `<div class="card"><div class="bloco-t">Valor no dia da contratação</div><div class="medio" data-k="carteira_entrada">${fRs(CB.dia0)}</div><p class="peq" style="margin-top:6px">Soma dos três, informada pelo banco em ${fD(CB.data)}: é quanto os swaps já valiam contra você no primeiro dia.${num(CB.remuneracao) ? ` Remuneração do banco e do escritório, segundo o banco: cerca de ${fR(CB.remuneracao)}.` : ''}${num(CB.dia0_proprio) ? ` Conta do app para o primeiro dia: ${fRs(CB.dia0_proprio)}.` : ''}</p></div>`;
+  else if (C.custo_entrada_estimado) h += `<div class="card"><div class="bloco-t">Custo de entrada (estimado)</div><div class="medio" data-k="carteira_entrada">${fR(C.custo_entrada_estimado.min)} a ${fR(C.custo_entrada_estimado.max)}</div><p class="peq" style="margin-top:6px">É uma estimativa do que o banco ganhou, embutido no preço, quando os swaps foram contratados.</p></div>`;
   h += '</div>';
+  if (CB && CB.data) {
+    let b = `<div class="card inf"><div class="bloco-t">O que o banco informou em ${fD(CB.data)}</div><dl>`;
+    if (num(CB.mercado)) b += `<dt>Para encerrar os três (valor de mercado)</dt><dd>${fRs(CB.mercado)}</dd>`;
+    if (num(CB.na_curva)) b += `<dt>Valor na curva (o que aparece no extrato)</dt><dd>${fRs(CB.na_curva)}</dd>`;
+    if (CB.garantias && num(CB.garantias.total)) b += `<dt>Garantia bloqueada${CB.garantias.ativos ? ' (' + esc(CB.garantias.ativos) + ')' : ''}</dt><dd>${fR(CB.garantias.total)}</dd>`;
+    if (CB.validade_cotacao) b += `<dt>Validade de uma cotação</dt><dd>${esc(CB.validade_cotacao)}</dd>`;
+    if (CB.ordem_condicional === false) b += '<dt>Ordem de saída programada</dt><dd>o banco não aceita</dd>';
+    b += `</dl><p class="peq" style="margin:10px 0 0">O valor na curva não é o valor para sair. Sem ordem programada, o pedido de encerramento tem de partir de você, no dia, dentro do horário do mercado.</p>
+      <div class="acoes"><button type="button" class="btn" data-ir="roteiro">Ver a resposta completa do banco</button></div></div>`;
+    h += b;
+  }
   h += `<div class="card"><div class="bloco-t">Chance de chegar à meta</div>
     <div class="chance"><div class="l1"><span>Chance de os três chegarem ${todosZero ? 'a zero (sem perda)' : 'à meta'}</span><b data-k="chance_todos_zero">${faixa(C.chance_todos_zero)}</b></div>${barraFaixa(C.chance_todos_zero)}</div>
     <div class="chance"><div class="l1"><span>Chance de nenhum chegar</span><b data-k="chance_nenhum">${faixa(C.chance_nenhum)}</b></div>${barraFaixa(C.chance_nenhum)}</div>`;
@@ -699,15 +727,18 @@ function renderNovo(){
     const lin = (rot, a, b) => `<div>${rot}</div><div>${a}</div><div>${b}</div>`;
     let q = `<div class="card"><div class="bloco-t">Proposta oficial registrada${O.data ? ' em ' + fD(O.data) : ''}</div>
       <p style="margin:0"><b>${fR(O.valor)} a ${fTaxa(O.taxa)} ao ano</b>${num(O.pct_cdi) ? ', pagando ' + O.pct_cdi.toLocaleString('pt-BR') + '% do CDI' : ''}${O.vencimento ? ', vencimento ' + fD(O.vencimento) : ''}.</p>`;
-    if (O.condicoes_diferentes) q += `<div class="aviso" style="margin-top:8px">O percentual do CDI ou o vencimento desta proposta são diferentes dos usados na simulação desta tela (${cond}). As chances abaixo <b>não valem</b> para ela; peça para ampliar a simulação.</div>`;
-    else if (num(O.custo_entrada_proprio) || num(O.saida_dia0)) {
+    if (O.condicoes_diferentes) q += `<div class="aviso" style="margin-top:8px">O percentual do CDI ou o vencimento desta proposta são diferentes dos usados na simulação desta tela (${cond}). As chances abaixo <b>não valem</b> para ela.</div>`;
+    if (num(O.custo_entrada_proprio) || num(O.saida_dia0) || num(O.taxa_justa_banco)) {
       q += `<div class="duas"><div>No dia da entrada</div><div>Banco</div><div>Conta própria</div>` +
         lin('Taxa justa de mercado', num(O.taxa_justa_banco) ? fTaxa(O.taxa_justa_banco) : 'não informou', num(O.taxa_justa_propria) ? fTaxa(O.taxa_justa_propria) : '—') +
-        lin('Valor de saída no primeiro dia', num(O.saida_dia0) ? fRs(O.saida_dia0) : 'não informou', num(O.custo_entrada_proprio) ? fRs(O.custo_entrada_proprio) : '—') + '</div>';
+        lin('Valor de saída no primeiro dia', num(O.saida_dia0) ? fRs(O.saida_dia0) : (O.saida_dia0_texto ? esc(O.saida_dia0_texto) : 'não informou'), num(O.custo_entrada_proprio) ? fRs(O.custo_entrada_proprio) : '—') + '</div>';
       if (num(O.saida_dia0) && num(O.custo_entrada_proprio)) { const df = O.saida_dia0 - O.custo_entrada_proprio;
         q += `<p class="peq" style="margin:8px 0 0">${Math.round(df) === 0 ? 'O valor do banco é igual ao da conta própria' : 'O valor do banco é ' + fR(df) + (df < 0 ? ' pior' : ' melhor') + ' para você do que a conta própria'}${Math.abs(df) > Math.max(2000, 0.02 * O.valor) ? '. É uma diferença grande: vale perguntar ao assessor de onde ela vem.' : ', dentro do esperado.'}</p>`; }
     }
     if (num(O.remuneracao)) q += `<p class="peq" style="margin:8px 0 0">Remuneração do banco e do escritório informada: ${fR(O.remuneracao)}.</p>`;
+    if (num(O.por_ponto)) q += `<p class="peq" style="margin:8px 0 0">Tamanho da aposta: se os juros desse prazo caírem 1 ponto depois da entrada, este swap ganha perto de ${fR(O.por_ponto)}; se subirem 1 ponto, perde um valor parecido.</p>`;
+    if (O.validade_informada && !(O.conferir && O.conferir.length)) q += `<p class="peq" style="margin:8px 0 0">Validade informada pelo banco: ${fD(O.validade_informada)}.</p>`;
+    if (O.conferir && O.conferir.length) q += `<div class="aviso" style="margin:10px 0 0"><b>Pontos a esclarecer com o assessor</b><ul>${O.conferir.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`;
     $('nsOficial').innerHTML = q + '</div>';
   }
   // registrar a resposta do banco: vai para o diário (tabela que só aceita inserir) e o PC lê na próxima atualização
@@ -821,8 +852,10 @@ function renderRoteiro(){
   if (!R) { sec.innerHTML = vazioResumo(); return; }
   const itens = R.roteiro || [];
   if (!itens.length) { sec.innerHTML = '<div class="card"><p>Nenhum item neste resumo.</p></div>'; return; }
-  sec.innerHTML = '<p class="mut">Pedidos que vale fazer ao assessor. Cada botão só abre o rascunho: quem envia é você.</p>' + itens.map((it, i) => `<div class="card" data-i="${i}">
+  const nResp = itens.filter(i => i.resposta).length;
+  sec.innerHTML = '<p class="mut">Pedidos que vale fazer ao assessor. Cada botão só abre o rascunho: quem envia é você.' + (nResp ? ` O banco já respondeu ${nResp} de ${itens.length}; a resposta e o que ainda falta aparecem em cada cartão.` : '') + '</p>' + itens.map((it, i) => `<div class="card" data-i="${i}">
     <h2>${esc(it.titulo)}</h2><p class="peq">${esc(it.porque)}</p>
+    ${it.resposta ? `<div class="resp"><div class="bloco-t">O banco respondeu em ${fD(it.resposta.data)}</div><p>${esc(it.resposta.texto)}</p>${it.resposta.falta ? `<p><b>Ainda falta:</b> ${esc(it.resposta.falta)}</p>` : ''}</div>` : '<p class="peq" style="margin:8px 0 0"><span class="chip sem_sinal">Sem resposta registrada</span></p>'}
     <details style="margin:8px 0"><summary>Ver a mensagem</summary><textarea class="msgbox" readonly rows="7" style="margin-top:10px"></textarea></details>
     <div class="acoes"><a class="btn prim" data-mail target="_blank" rel="noopener" href="#">Abrir e-mail</a><a class="btn" data-wa target="_blank" rel="noopener" href="#">Abrir WhatsApp</a><button type="button" class="btn" data-copiar>Copiar mensagem</button></div></div>`).join('');
   sec.querySelectorAll('.card[data-i]').forEach(c => {
@@ -981,7 +1014,7 @@ function baixarLembretes(){
   const txt = s => String(s).replace(/\\/g, '\\\\').replace(/([,;])/g, '\\$1').replace(/\n/g, '\\n');
   const EV = [
     {id:'diario',    hora:'210000', rr:'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR', d:prox(d => d.getDay() >= 1 && d.getDay() <= 5), t:'Swaps: ver a agenda do dia (1 minuto)', ds:'Os dados do dia já entraram. Veja se algum swap ou os juros longos pedem decisão.'},
-    {id:'semanal',   hora:'090000', rr:'FREQ=WEEKLY;BYDAY=MO',             d:prox(d => d.getDay() === 1),                   t:'Swaps: pedir extrato e cotação de saída', ds:'Pedir ao assessor, no mesmo dia, o valor do extrato e a cotação firme de saída de cada swap. Ler a semana.'},
+    {id:'semanal',   hora:'090000', rr:'FREQ=WEEKLY;BYDAY=MO',             d:prox(d => d.getDay() === 1),                   t:'Swaps: pedir o valor de mercado', ds:'Pedir ao assessor o valor de mercado (o valor para sair) de cada swap, todos no mesmo momento. Ler a semana.'},
     {id:'quinzenal', hora:'090000', rr:'FREQ=MONTHLY;BYMONTHDAY=1,16',     d:prox(d => d.getDate() === 1 || d.getDate() === 16), t:'Swaps: proposta de novo swap e respostas pendentes', ds:'Pedir a proposta oficial de um novo swap e cobrar as respostas por escrito em aberto. Se cair em fim de semana, fazer no dia útil seguinte.'},
     {id:'mensal',    hora:'090000', rr:'FREQ=MONTHLY;BYMONTHDAY=12',       d:prox(d => d.getDate() === 12),                 t:'Swaps: extrato do mês, inflação e decisão do mês', ds:'Pedir o extrato oficial e a posição das garantias, ler a inflação do mês e anotar a decisão do mês no diário.'},
   ];
@@ -1152,7 +1185,7 @@ async function mostrarEnviar(){
   $('eHist').innerHTML = error ? '<tr><td>Erro: '+error.message+'</td></tr>' :
     '<tr><th>Enviado</th><th>Posição de</th><th>O que é</th><th>Total</th><th>Situação</th></tr>' +
     (data||[]).map(r => { const vs = [r.s35,r.s30a,r.s30b].filter(x=>x!=null), todos3 = vs.length === 3, t = vs.length ? vs.reduce((a,b)=>a+(+b),0) : null;
-      return '<tr><td>'+fdt(r.criado_em)+'</td><td>'+r.data_ref.split('-').reverse().join('/')+'</td><td>'+(r.tipo==='saida'?'Cotação de saída':'Extrato')+'</td><td class="'+(t==null?'':cl(t))+'">'+(t==null?'só arquivo':brl(t)+(todos3?'':' ('+vs.length+' swap'+(vs.length>1?'s':'')+')'))+'</td><td style="white-space:normal;text-align:left">'+esc(r.status)+'</td></tr>'; }).join('');
+      return '<tr><td>'+fdt(r.criado_em)+'</td><td>'+r.data_ref.split('-').reverse().join('/')+'</td><td>'+(r.tipo==='saida'?'Cotação de saída':'Valor de mercado')+'</td><td class="'+(t==null?'':cl(t))+'">'+(t==null?'só arquivo':brl(t)+(todos3?'':' ('+vs.length+' swap'+(vs.length>1?'s':'')+')'))+'</td><td style="white-space:normal;text-align:left">'+esc(r.status)+'</td></tr>'; }).join('');
 }
 $('eBtn').onclick = async () => {
   const eMsg = (t, tipo='') => { $('eMsg').textContent = t; $('eMsg').className = 'msg ' + tipo; };

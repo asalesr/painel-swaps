@@ -251,3 +251,10 @@ input[type=range]{width:100%;max-width:100%;min-width:0;padding:0;margin:6px 0 0
 #nav button[data-n]:not([data-n="0"])::after{margin-left:auto}
 #barra button{position:relative}
 #barra button[data-n]:not([data-n="0"])::after{position:absolute;top:5px;left:calc(50% + 7px)}
+
+/* ---- resposta do banco (roteiro, swap e carteira) */
+.resp{margin:10px 0 0;padding:10px 12px;border:1px solid var(--line);border-left:4px solid var(--am);border-radius:10px;font-size:.92rem;overflow-wrap:anywhere}
+.resp .bloco-t{margin:0}.resp p{margin:6px 0 0}
+.inf dl{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:8px 14px;margin:0}
+.inf dt{color:var(--fg2)}.inf dd{margin:0;text-align:right;font-weight:650;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.aviso ul{margin:6px 0 0;padding-left:18px}.aviso li{margin:4px 0}
