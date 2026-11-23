@@ -1,3 +1,4 @@
+// © 2026 asalesr. Todos os direitos reservados. Proibida a cópia ou o uso sem autorização por escrito (veja LICENSE).
 // Painel de Juros: telas do celular e do PC.
 // Funcionamento: (1) celular publicado: login no Supabase e leitura do resumo (documentos.slug='resumo');
 // (2) PC local: se existir window.RESUMO_LOCAL, não há login nem Supabase.
