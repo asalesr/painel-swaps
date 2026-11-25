@@ -565,6 +565,9 @@ function renderCarteira(){
     if (CB.garantias && num(CB.garantias.total)) b += `<dt>Garantia bloqueada${CB.garantias.ativos ? ' (' + esc(CB.garantias.ativos) + ')' : ''}</dt><dd>${fR(CB.garantias.total)}</dd>`;
     if (CB.validade_cotacao) b += `<dt>Validade de uma cotação</dt><dd>${esc(CB.validade_cotacao)}</dd>`;
     if (CB.ordem_condicional === false) b += '<dt>Ordem de saída programada</dt><dd>o banco não aceita</dd>';
+    if (CB.custo_extra_saida === false) b += '<dt>Custo para sair, além do valor de mercado</dt><dd>não há</dd>';
+    if (CB.compensa_prejuizo === false) b += '<dt>Abater no imposto o prejuízo de um swap</dt><dd>não é possível</dd>';
+    if (CB.garantias && CB.garantias.descontos) b += `<dt>Desconto dos títulos em garantia</dt><dd style="font-weight:400">${esc(CB.garantias.descontos)}</dd>`;
     b += `</dl><p class="peq" style="margin:10px 0 0">O valor na curva não é o valor para sair. Sem ordem programada, o pedido de encerramento tem de partir de você, no dia, dentro do horário do mercado.</p>
       <div class="acoes"><button type="button" class="btn" data-ir="roteiro">Ver a resposta completa do banco</button></div></div>`;
     h += b;
@@ -737,7 +740,11 @@ function renderNovo(){
         q += `<p class="peq" style="margin:8px 0 0">${Math.round(df) === 0 ? 'O valor do banco é igual ao da conta própria' : 'O valor do banco é ' + fR(df) + (df < 0 ? ' pior' : ' melhor') + ' para você do que a conta própria'}${Math.abs(df) > Math.max(2000, 0.02 * O.valor) ? '. É uma diferença grande: vale perguntar ao assessor de onde ela vem.' : ', dentro do esperado.'}</p>`; }
     }
     if (num(O.remuneracao)) q += `<p class="peq" style="margin:8px 0 0">Remuneração do banco e do escritório informada: ${fR(O.remuneracao)}.</p>`;
-    if (num(O.por_ponto)) q += `<p class="peq" style="margin:8px 0 0">Tamanho da aposta: se os juros desse prazo caírem 1 ponto depois da entrada, este swap ganha perto de ${fR(O.por_ponto)}; se subirem 1 ponto, perde um valor parecido.</p>`;
+    if (num(O.por_ponto)) q += `<p class="peq" style="margin:8px 0 0">Tamanho da aposta: se os juros desse prazo caírem 1 ponto depois da entrada, este swap ganha perto de ${fR(O.por_ponto)}; se subirem 1 ponto, perde ${num(O.por_ponto_alta) ? 'perto de ' + fR(O.por_ponto_alta) : 'um valor parecido'}.</p>`;
+    if (num(O.juros_que_zeram) && num(O.juros_do_prazo)) q += `<p class="peq" style="margin:8px 0 0">Para esta operação empatar no primeiro dia, os juros desse prazo teriam de estar em ${fTaxa(O.juros_que_zeram)}; hoje estão em ${fTaxa(O.juros_do_prazo)}.</p>`;
+    if (O.tabela && O.tabela.linhas && O.tabela.linhas.length) q += `<details style="margin-top:10px"><summary><b>Tabela do material do banco × conta do app</b></summary>
+      <p class="peq" style="margin:8px 0">Resultado de sair no mesmo dia, se os juros de 10 anos fossem para cada nível.</p>
+      <div class="tw"><table class="tprop"><tr><th>Juros de 10 anos</th><th>Banco</th><th>Conta do app</th></tr>${O.tabela.linhas.map(l => `<tr><td>${l[0].toLocaleString('pt-BR', {minimumFractionDigits:1})}%</td><td class="${cor(l[1])}">${fRs(l[1])}</td><td class="${cor(l[2])}">${fRs(l[2])}</td></tr>`).join('')}</table></div></details>`;
     if (O.validade_informada && !(O.conferir && O.conferir.length)) q += `<p class="peq" style="margin:8px 0 0">Validade informada pelo banco: ${fD(O.validade_informada)}.</p>`;
     if (O.conferir && O.conferir.length) q += `<div class="aviso" style="margin:10px 0 0"><b>Pontos a esclarecer com o assessor</b><ul>${O.conferir.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`;
     $('nsOficial').innerHTML = q + '</div>';
@@ -841,8 +848,24 @@ function renderInflacao(){
       <li><b>Juros de 10 anos dos EUA</b>: se sobem, dificultam a queda dos juros aqui.</li>
     </ul>
     <p class="peq" style="margin:0">O “Termômetro dos sinais”, em Painel técnico, soma vários desses itens todo dia.</p></div>`;
+  h += blocoContexto();
   h += `<p class="nota">Fontes: IBGE, pela série do Banco Central (IPCA); BLS, o instituto de estatísticas do trabalho dos EUA (inflação americana); Tesouro americano (juros de 10 anos). “Direção recente” compara a taxa de hoje com a de 3 e 6 meses atrás; não é previsão.</p>`;
   sec.innerHTML = h;
+}
+
+// ---- contexto de mercado: pesquisa datada, gravada no PC (painel/contexto_mercado.json)
+function blocoContexto(){
+  const C = R && R.contexto;
+  if (!C || !C.blocos) return '';
+  const idade = C.data ? Math.round((Date.now() - new Date(C.data + 'T12:00:00').getTime()) / 864e5) : null;
+  const li = it => `<li>${esc(it.t)}${it.fonte && /^https:\/\//.test(it.fonte) ? ` <a href="${esc(it.fonte)}" target="_blank" rel="noopener">fonte</a>` : ''}</li>`;
+  let h = `<h2 style="margin-top:22px">Contexto de mercado</h2><p class="peq">Pesquisa de ${fD(C.data)}${num(idade) && idade > 21 ? ' (já tem ' + idade + ' dias: peça para atualizar)' : ''}. ${esc(C.nota || '')}</p>`;
+  const L = C.leitura || {};
+  [['O que joga contra a queda dos juros longos', 'contra'], ['O que joga a favor', 'favor'], ['Datas que podem mexer nos juros', 'datas']].forEach(([t, k]) => {
+    if (L[k] && L[k].length) h += `<div class="card"><div class="bloco-t">${t}</div><ul class="ctx">${L[k].map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`;
+  });
+  h += C.blocos.map(b => `<details><summary><b>${esc(b.titulo)}: os fatos e as fontes</b></summary><ul class="ctx">${b.itens.map(li).join('')}</ul></details>`).join('');
+  return h;
 }
 
 // ====================================================================================================

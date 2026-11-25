@@ -259,3 +259,10 @@ input[type=range]{width:100%;max-width:100%;min-width:0;padding:0;margin:6px 0 0
 .inf dl{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:8px 14px;margin:0}
 .inf dt{color:var(--fg2)}.inf dd{margin:0;text-align:right;font-weight:650;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .aviso ul{margin:6px 0 0;padding-left:18px}.aviso li{margin:4px 0}
+
+/* ---- contexto de mercado e tabela da proposta */
+.ctx{margin:8px 0 0;padding-left:18px}.ctx li{margin:6px 0;overflow-wrap:anywhere}
+.tprop{width:100%;border-collapse:collapse;font-size:.9rem;font-variant-numeric:tabular-nums}
+.tprop th,.tprop td{padding:7px 8px;border-top:1px solid var(--line);text-align:right;white-space:nowrap}
+.tprop th{border-top:0;font-size:.74rem;text-transform:uppercase;letter-spacing:.03em;color:var(--fg3)}
+.tprop th:first-child,.tprop td:first-child{text-align:left}
