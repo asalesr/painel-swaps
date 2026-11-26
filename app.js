@@ -648,7 +648,7 @@ function renderNovo(){
     <p class="peq" style="margin:0">Escolha o ponto de partida. O padrão são as condições de mercado de hoje.</p>
     <div class="presets" role="group" aria-label="Ponto de partida">
       <button type="button" data-pre="mercado"><span>Mercado hoje</span><small>${fTaxa(N.taxa_justa)}</small></button>
-      ${of ? `<button type="button" data-pre="oferta"><span>Última oferta do assessor</span><small>${fTaxa(of.taxa)}${num(of.valor) ? ' · ' + fR(of.valor) : ''}</small></button>` : ''}
+      ${of ? `<button type="button" data-pre="oferta"><span>${of.modelo ? 'Exemplo do banco' : 'Última oferta do assessor'}</span><small>${fTaxa(of.taxa)}${num(of.valor) ? ' · ' + fR(of.valor) : ''}</small></button>` : ''}
       <button type="button" data-pre="livre"><span>Personalizada</span><small>você ajusta</small></button>
     </div>
     <div class="ctrl"><div class="lbl"><label for="nsValor" style="margin:0">Valor do novo swap</label><b id="nsValorTxt"></b></div>
@@ -729,8 +729,10 @@ function renderNovo(){
   const O = N.oferta_assessor;
   if (O && O.fonte === 'banco') {
     const lin = (rot, a, b) => `<div>${rot}</div><div>${a}</div><div>${b}</div>`;
-    let q = `<div class="card"><div class="bloco-t">Proposta oficial registrada${O.data ? ' em ' + fD(O.data) : ''}</div>
+    const DG = O.proposta_dirigida;
+    let q = `<div class="card"><div class="bloco-t">${O.modelo ? 'Exemplo de ordem do banco' + (O.data ? ', de ' + fD(O.data) : '') : 'Proposta oficial registrada' + (O.data ? ' em ' + fD(O.data) : '')}</div>
       <p style="margin:0"><b>${fR(O.valor)} a ${fTaxa(O.taxa)} ao ano</b>${num(O.pct_cdi) ? ', pagando ' + O.pct_cdi.toLocaleString('pt-BR') + '% do CDI' : ''}${O.vencimento ? ', vencimento ' + fD(O.vencimento) : ''}.</p>`;
+    if (O.modelo) q += `<div class="aviso" style="margin-top:8px">${esc(O.nota || 'Veio como modelo de ordem; não é proposta dirigida a você.')}${DG && num(DG.taxa) ? ` A última proposta feita a você é a de ${fD(DG.data)}: ${fR(DG.valor)} a ${fTaxa(DG.taxa)} ao ano${num(DG.pct_cdi) ? ', pagando ' + DG.pct_cdi.toLocaleString('pt-BR') + '% do CDI' : ''}.` : ''}</div>`;
     if (O.condicoes_diferentes) q += `<div class="aviso" style="margin-top:8px">O percentual do CDI ou o vencimento desta proposta são diferentes dos usados na simulação desta tela (${cond}). As chances abaixo <b>não valem</b> para ela.</div>`;
     if (num(O.custo_entrada_proprio) || num(O.saida_dia0) || num(O.taxa_justa_banco)) {
       q += `<div class="duas"><div>No dia da entrada</div><div>Banco</div><div>Conta própria</div>` +
