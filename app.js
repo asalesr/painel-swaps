@@ -29,6 +29,7 @@ const ICONES = {
   dados:    '<path d="M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
   mais:     '<path d="M4 7h16M4 12h16M4 17h16"/>',
   agenda:   '<path d="M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM4 10h16M8 3v4M16 3v4M8.5 15l2.5 2.5 4.5-5"/>',
+  mudou:    '<path d="M7 20V5M3.5 8.5 7 5l3.5 3.5M17 4v15M13.5 15.5 17 19l3.5-3.5"/>',
 };
 const svg = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONES[k]}</svg>`;
 const TELAS = [
@@ -38,6 +39,7 @@ const TELAS = [
   {id:'s30b',     rot:'2030 maior',          grupo:'Seus swaps',   icone:'swap',     barra:true, tipo:'swap', dados:true},
   {id:'carteira', rot:'Carteira',            grupo:'Seus swaps',   icone:'carteira', barra:true, tipo:'carteira', dados:true},
   {id:'novo',     rot:'Novo swap',           grupo:'Mercado e novo swap',icone:'novo',     tipo:'novo', dados:true, destaque:true},
+  {id:'mudou',    rot:'O que mudou',         grupo:'Mercado e novo swap',icone:'mudou',    tipo:'mudou', dados:true},
   {id:'inflacao', rot:'Inflação e juros',    grupo:'Mercado e novo swap',icone:'cenarios', tipo:'inflacao', dados:true},
   {id:'diario',   rot:'Diário do assessor',  grupo:'Assessor',     icone:'diario',   tipo:'diario', login:true},
   {id:'roteiro',  rot:'O que pedir ao banco',grupo:'Assessor',     icone:'pedir',    tipo:'roteiro'},
@@ -249,6 +251,7 @@ async function abrir(v, urg){
   else if (t.tipo === 'carteira') renderCarteira();
   else if (t.tipo === 'novo') renderNovo();
   else if (t.tipo === 'inflacao') renderInflacao();
+  else if (t.tipo === 'mudou') renderMudou();
   else if (t.tipo === 'roteiro') renderRoteiro();
   else if (t.tipo === 'agenda') renderAgenda();
   else if (t.tipo === 'doc') return LOCAL ? renderDocLocal(t.id) : carregarDoc(t.id, urg);
@@ -830,7 +833,7 @@ function renderInflacao(){
   const I = R.inflacao, J = R.juros || {};
   if (!I) { sec.innerHTML = '<div class="card"><h2>Inflação e juros</h2><p class="mut">O resumo enviado pelo PC ainda não traz estes dados. Eles entram na próxima atualização.</p></div>'; return; }
   const E = I.eua, nuc = E && E.nucleo_ultimo;
-  let h = `<div class="card"><div class="bloco-t">Por que olhar isto</div><p style="margin:0">Os seus swaps ganham quando os juros caem. Os bancos centrais só cortam juros com a inflação sob controle. <b>Inflação subindo = juros altos por mais tempo = mais demora para os swaps chegarem a zero.</b> Um novo swap é a mesma aposta: também perde se a inflação voltar a subir.</p></div>`;
+  let h = `<div class="card"><div class="bloco-t">Por que olhar isto</div><p style="margin:0">Os seus swaps ganham quando os juros caem. Os bancos centrais só cortam juros com a inflação sob controle. <b>Inflação subindo = juros altos por mais tempo = mais demora para os swaps chegarem a zero.</b> Um novo swap é a mesma aposta: também perde se a inflação voltar a subir.</p>${R.mudou ? '<div class="acoes"><button type="button" class="btn" data-ir="mudou">Ver o que mudou no dia, na semana e no mês</button></div>' : ''}</div>`;
   h += cartaoInflacao('Brasil', I.br, 'IPCA', 'A meta do Banco Central é 3% ao ano, com tolerância até 4,5%.', null);
   h += cartaoInflacao('Estados Unidos', E, 'Inflação ao consumidor', 'O objetivo do banco central americano é 2% ao ano.',
         nuc ? {serie: E.nucleo, estimados: E.estimados_nucleo, rotulo: 'Sem alimentos e energia', texto: `Tirando alimentos e energia, que oscilam muito, a inflação americana está em ${fP2(nuc.valor)} (${esc((E.nucleo_tendencia || {}).rotulo || '')}). Quando o índice cheio sobe e essa medida fica parada, a alta vem dos itens voláteis.`} : null);
@@ -853,6 +856,7 @@ function renderInflacao(){
   h += blocoContexto();
   h += `<p class="nota">Fontes: IBGE, pela série do Banco Central (IPCA); BLS, o instituto de estatísticas do trabalho dos EUA (inflação americana); Tesouro americano (juros de 10 anos). “Direção recente” compara a taxa de hoje com a de 3 e 6 meses atrás; não é previsão.</p>`;
   sec.innerHTML = h;
+  sec.querySelectorAll('[data-ir]').forEach(b => b.onclick = () => abrir(b.dataset.ir));
 }
 
 // ---- contexto de mercado: pesquisa datada, gravada no PC (painel/contexto_mercado.json)
@@ -867,7 +871,94 @@ function blocoContexto(){
     if (L[k] && L[k].length) h += `<div class="card"><div class="bloco-t">${t}</div><ul class="ctx">${L[k].map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`;
   });
   h += C.blocos.map(b => `<details><summary><b>${esc(b.titulo)}: os fatos e as fontes</b></summary><ul class="ctx">${b.itens.map(li).join('')}</ul></details>`).join('');
+  const A = R.mudou && R.mudou.contexto && R.mudou.contexto.anterior, LA = (A && A.leitura) || {};
+  if (A && ((LA.contra || []).length || (LA.favor || []).length)) h += `<details><summary><b>Como estava na pesquisa anterior, de ${fD(A.data)}</b></summary>`
+    + [['Jogava contra a queda dos juros longos', 'contra'], ['Jogava a favor', 'favor']].map(([t, k]) => (LA[k] || []).length ? `<p class="peq" style="margin:10px 0 0"><b>${t}</b></p><ul class="ctx">${LA[k].map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '').join('') + '</details>';
   return h;
+}
+
+// ====================================================================================================
+// 9c. O QUE MUDOU (bloco R.mudou, montado no PC: cada número comparado no ritmo em que ele muda)
+// ====================================================================================================
+const LEIT = {normal:'Oscilação normal', acima:'Acima do habitual', forte:'Movimento forte'};
+const fDiaMes = iso => iso ? String(iso).slice(8,10) + '/' + String(iso).slice(5,7) : '—';
+const fN2 = v => Math.abs(v).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+const fSig2 = v => !num(v) ? '—' : (Math.abs(v) < 0.005 ? 'igual' : (v > 0 ? '+' : '−') + fN2(v));
+const fxC = f => !f || !num(f.min) || !num(f.max) ? '—' : (Math.round(f.min * 100) === Math.round(f.max * 100) ? Math.round(f.min * 100) + '%' : Math.round(f.min * 100) + '% a ' + Math.round(f.max * 100) + '%');
+const corInv = v => !num(v) || Math.abs(v) < 0.005 ? '' : (v < 0 ? 'pos' : 'neg');   // juros, dólar e inflação: cair ajuda os swaps
+function mudouSaida(S){
+  if (!S) return '';
+  const H = S.habitual, tres = [['desde ' + fDiaMes((S.dia || {}).data), (S.dia || {}).delta], ['em 7 dias', (S.semana || {}).delta], ['em 30 dias', (S.mes || {}).delta]];
+  return `<div class="card"><div class="bloco-t">Todo dia · valor de saída</div>
+    <div class="grande ${cor(S.hoje)}">${fRs(S.hoje)}</div>
+    <div class="sub-p">Soma estimada dos três swaps em ${fD(S.data)}.</div>
+    <div class="tres3">${tres.map(([r, v]) => `<div>${r}<b class="${cor(v)}">${fRs(v)}</b></div>`).join('')}</div>
+    ${S.leitura ? `<p style="margin:12px 0 0">Variação do dia: <span class="tend">${LEIT[S.leitura]}</span></p>` : ''}
+    ${H ? `<p class="peq" style="margin:8px 0 0">Nos ${H.pregoes} dias úteis anteriores, a soma variou até ${fR(H.comum).replace(' ', '\u00a0')} em três de cada quatro dias e passou de ${fR(H.raro).replace(' ', '\u00a0')} em um de cada dez. Um dia sozinho não mostra tendência: compare com a semana e o mês.</p>` : ''}
+    <div class="tw"><table class="tm"><tr><th>Swap</th><th>No dia</th><th>7 dias</th><th>30 dias</th></tr>
+    ${(S.por_swap || []).map(x => `<tr><td>${esc(x.rotulo)}</td>${['dia', 'semana', 'mes'].map(k => `<td class="${cor(x[k])}">${fRs(x[k])}</td>`).join('')}</tr>`).join('')}</table></div></div>`;
+}
+function mudouMercado(rot, obs, B, fV, fDl, fH){
+  if (!B) return '';
+  const c = (k, r) => { const x = B[k]; return `<div>${r}<b class="${corInv(x && x.delta)}">${x ? fDl(x.delta) : '—'}</b></div>`; };
+  return `<div class="mm"><div class="of"><div><b>${rot}</b><div class="peq">${obs}</div></div><div class="d">${fV(B.hoje)}<div class="peq">${fDiaMes(B.data)}</div></div></div>
+    <div class="tres3">${c('dia', 'desde ' + fDiaMes((B.dia || {}).data))}${c('semana', 'em 7 dias')}${c('mes', 'em 30 dias')}</div>
+    ${B.leitura ? `<p class="peq" style="margin:6px 0 0">Variação do dia: <b>${LEIT[B.leitura].toLowerCase()}</b>${B.habitual ? ' (em três de cada quatro dias, varia até ' + fH(B.habitual.comum) + ')' : ''}.</p>` : ''}</div>`;
+}
+function mudouExpect(E){
+  if (!E || !E.itens || !E.itens.length) return '';
+  const c = v => `<td class="${corInv(v)}">${fSig2(v)}</td>`;
+  return `<div class="card"><div class="bloco-t">Toda semana · o que o mercado espera</div>
+    <p class="peq" style="margin:0 0 6px">Pesquisa do Banco Central com bancos e consultorias, com respostas até ${fD(E.data)}. É divulgada uma vez por semana.</p>
+    <div class="tw"><table class="tm"><tr><th>Previsão</th><th>Agora</th><th>1 semana</th><th>4 semanas</th></tr>
+    ${E.itens.map(x => `<tr><td>${esc(x.rotulo)}</td><td>${fP2(x.agora)}</td>${c(x.semana)}${c(x.mes)}</tr>`).join('')}</table></div>
+    <p class="peq" style="margin:8px 0 0">As duas últimas colunas mostram quanto a previsão mudou, em pontos. Previsão subindo semana após semana afasta o corte de juros.</p></div>`;
+}
+function mudouInfl(I){
+  if (!I || (!I.br && !I.eua)) return '';
+  const l = (rot, x) => x ? `<div class="of"><div><b>${rot}</b><div class="peq">em 12 meses, até ${fMesAno(x.mes)}</div></div><div class="d">${fP2(x.valor)}<div class="peq ${corInv(x.delta)}">${fVar(x.delta)}</div><div class="peq">${MESES_EXT[+String(x.mes_anterior).slice(5, 7) - 1]}: ${fP2(x.anterior)}</div></div></div>` : '';
+  return `<div class="card"><div class="bloco-t">Todo mês · inflação</div>${l('Brasil (IPCA)', I.br)}${l('Estados Unidos', I.eua)}
+    <p class="peq" style="margin:8px 0 0">Cada índice sai uma vez por mês. Entre uma divulgação e outra, o número não muda.</p></div>`;
+}
+function mudouSim(M){
+  if (!M || !M.itens || !M.itens.length) return '';
+  const A = M.anterior, jl = o => num(o.juros_longos) ? ' (juros longos em ' + fP2(o.juros_longos) + ')' : '';
+  let h = `<div class="card"><div class="bloco-t">A cada 7 dias · chances da simulação</div>
+    <p class="peq" style="margin:0 0 6px">Chance de chegar a zero até jan/2030. Simulação feita com os juros de ${fD(M.data)}${jl(M)}${A ? '. A anterior usou os de ' + fD(A.data) + jl(A) : ''}.</p>`;
+  h += A ? `<div class="tw"><table class="tm"><tr><th>Chance</th><th>Antes</th><th>Agora</th></tr>${M.itens.map(x => `<tr><td>${esc(x.rotulo)}</td><td>${fxC(x.antes)}</td><td><b>${fxC(x.agora)}</b></td></tr>`).join('')}</table></div>`
+         : M.itens.map(x => `<div class="of"><div>${esc(x.rotulo)}</div><div class="d">${fxC(x.agora)}</div></div>`).join('')
+           + '<p class="peq" style="margin:8px 0 0">Ainda não há simulação anterior guardada. A comparação aparece quando ela for refeita: a cada 7 dias, ou antes, se chegar valor novo do banco ou se as metas mudarem.</p>';
+  h += (M.ressalvas || []).map(r => `<p class="peq" style="margin:8px 0 0">${esc(r)}</p>`).join('');
+  return h + '<p class="peq" style="margin:8px 0 0">As chances aparecem em faixa porque dependem de hipóteses. Refazer a simulação todo dia só faria a faixa oscilar, sem informação nova.</p></div>';
+}
+function mudouCtx(C){
+  if (!C) return '';
+  const A = C.anterior;
+  return `<div class="card"><div class="bloco-t">Quando você pede · contexto de mercado</div>
+    <p style="margin:0">Pesquisa de ${fD(C.data)}${A ? '. A anterior é de ' + fD(A.data) + ' e fica logo abaixo da atual, para comparar' : ''}.</p>
+    ${A ? '' : '<p class="peq" style="margin:6px 0 0">Ainda não há pesquisa anterior guardada. Cada pesquisa passa a ficar guardada com a data, e a próxima já aparece junto com esta.</p>'}
+    <div class="acoes"><button type="button" class="btn" data-ir="inflacao">Ver o contexto de mercado</button></div></div>`;
+}
+function renderMudou(){
+  const sec = $('tela-mudou');
+  if (!R) { sec.innerHTML = vazioResumo(); return; }
+  const M = R.mudou;
+  if (!M) { sec.innerHTML = '<div class="card"><h2>O que mudou</h2><p class="mut">O resumo enviado pelo PC ainda não traz este quadro. Ele entra na próxima atualização (20h30).</p></div>'; return; }
+  const J = M.juros || {}, S = M.saida;
+  const merc = mudouMercado('Juros longos no Brasil', 'é o que move o valor de saída dos swaps', J.br_longo, fP2, fVar, fPP)
+             + mudouMercado('Juros de 10 anos nos EUA', 'quando sobem, puxam os juros daqui para cima', J.eua_10a, fP2, fVar, fPP)
+             + mudouMercado('Dólar', 'dólar em alta pressiona a inflação', J.dolar, v => 'R$ ' + fN2(v), v => !num(v) ? '—' : Math.abs(v) < 0.005 ? 'igual' : (v > 0 ? 'subiu R$ ' : 'caiu R$ ') + fN2(v), v => 'R$ ' + fN2(v));
+  let h = '<p class="mut">Cada número aparece comparado no ritmo em que ele realmente muda. Comparar tudo com a véspera mostraria mais ruído do que informação.</p>';
+  h += mudouSaida(S);
+  if (merc) h += `<div class="card"><div class="bloco-t">Todo dia · juros e dólar</div>${merc}<p class="peq" style="margin:8px 0 0">Verde: o movimento ajuda os seus swaps. Vermelho: atrapalha.</p></div>`;
+  h += mudouExpect(M.expectativa) + mudouInfl(M.inflacao) + mudouSim(M.simulacao) + mudouCtx(M.contexto);
+  if (S && S.ultimos && S.ultimos.length) h += `<div class="card"><div class="bloco-t">Últimos ${S.ultimos.length} dias úteis</div>
+    <div class="tw"><table class="tm"><tr><th>Dia</th><th>Juros longos</th><th>Soma</th><th>No dia</th></tr>
+    ${S.ultimos.map(u => `<tr><td>${fDiaMes(u.data)}</td><td>${fP2(u.juros)}</td><td>${fRs(u.soma)}</td><td class="${cor(u.dia)}">${fRs(u.dia)}</td></tr>`).join('')}</table></div>
+    <p class="peq" style="margin:8px 0 0">Série refeita com a calibração atual, pelo último valor informado pelo banco; por isso pode diferir do que o app mostrou em cada dia. O registro do que foi mostrado em cada dia, com opção de baixar, fica na tela Dados.</p></div>`;
+  h += '<p class="nota">Comparações feitas pelo app com dados públicos e com a estimativa própria do valor de saída. O valor que vale é a cotação que o banco informar. Nada aqui é previsão.</p>';
+  sec.innerHTML = h;
+  sec.querySelectorAll('[data-ir]').forEach(b => b.onclick = () => abrir(b.dataset.ir));
 }
 
 // ====================================================================================================

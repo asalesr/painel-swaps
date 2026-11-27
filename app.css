@@ -231,6 +231,13 @@ input[type=range]{width:100%;max-width:100%;min-width:0;padding:0;margin:6px 0 0
 .tres3 b{display:block;font-size:1rem;color:var(--fg);font-variant-numeric:tabular-nums}
 .lista-sinais{margin:0;padding-left:18px}.lista-sinais li{margin:0 0 8px}
 
+/* ---- O que mudou */
+.tm{margin-top:10px}.tm td:first-child,.tm th:first-child{white-space:normal;overflow-wrap:anywhere}
+.tm tr:last-child td{border-bottom:0}
+.mm{padding:10px 0;border-bottom:1px solid var(--grid)}.mm:first-of-type{padding-top:0}
+.mm .of{padding:0;border-bottom:0}
+.tres3 b.pos{color:var(--pos)}.tres3 b.neg{color:var(--neg)}
+
 /* ---- Agenda de alertas */
 .ag{border-left:5px solid var(--line)}
 .ag.alerta{border-left-color:var(--lar)}.ag.atencao{border-left-color:var(--am)}
